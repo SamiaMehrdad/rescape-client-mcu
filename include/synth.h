@@ -21,6 +21,19 @@ enum Waveform
         WAVE_NOISE
 };
 
+// Combined sound presets (waveform + ADSR)
+enum SoundPreset
+{
+        SOUND_PLUCK,      // Triangle wave, short percussive (guitar, harp)
+        SOUND_SOFT_PAD,   // Sine wave, gentle attack and release (pad, strings)
+        SOUND_ORGAN,      // Square wave, instant attack, sustain (organ, synth)
+        SOUND_PIANO,      // Triangle wave, medium attack, natural decay
+        SOUND_PERCUSSION, // Noise, very short, sharp (drum, click)
+        SOUND_BEEP,       // Square wave, instant on/off (beep, alert)
+        SOUND_SYNTH_LEAD, // Sawtooth, balanced envelope (lead synth)
+        SOUND_DEFAULT     // Triangle wave, balanced general purpose
+};
+
 // ADSR envelope structure
 struct ADSR
 {
@@ -56,9 +69,14 @@ private:
 public:
         Synth(u8 outputPin, u8 pwmChannel);
 
+        // Initialize synthesizer with a complete sound preset
+        void init(SoundPreset preset = SOUND_DEFAULT);
+
+        // Individual configuration methods (if needed for advanced customization)
         void begin(u16 sampleRateHz = 8000);
         void setWaveform(Waveform wave);
         void setADSR(u16 attack, u16 decay, u8 sustain, u16 release);
+        void setSoundPreset(SoundPreset preset);
         void playNote(u16 freq, u16 durationMs, u8 volume = 255);
         void stopNote();
         bool isPlaying();

@@ -17,7 +17,232 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 ---
 
-## November 29, 2025
+## November 29, 2025 - Major Architecture Refactoring
+
+### 🎉 Complete Code Modernization
+
+**Status:** ✅ Complete
+
+**Summary:** Transformed monolithic 300-line main.cpp into clean, modular architecture with proper separation of concerns, event-driven design, and professional code organization.
+
+---
+
+### New Modular Architecture
+
+#### 1. Animation Module (`animation.h/cpp`)
+
+**Purpose:** Encapsulate all LED animation logic
+
+**Features:**
+
+-   Multiple animation types: Red Dot Chase, Rainbow Cycle, Breathing, Sparkle
+-   Clean API: `start()`, `stop()`, `update()`, `isActive()`
+-   Frame-based timing system
+-   Easy to extend with new patterns
+
+**Benefits:**
+
+-   All animation logic in one place
+-   No animation state in main.cpp
+-   Simple to add new effects
+
+---
+
+#### 2. InputHandler Module (`inputhandler.h/cpp`)
+
+**Purpose:** Unified abstraction for all input sources
+
+**Features:**
+
+-   Event-driven callback pattern
+-   Handles buttons, keypad (4x4), switches
+-   Proper short/long press detection
+-   Graceful degradation if I/O expander missing
+
+**Implementation:**
+
+-   Uses `keyReleased()` to detect short press (not `keyPressed()`)
+-   Tracks `wasLongPress` flag to prevent conflicts
+-   Short press triggers only on button release if not long press
+-   Long press triggers when threshold reached while held
+
+**Benefits:**
+
+-   Clean separation of input detection and action
+-   Easy to add new input types
+-   No input logic in main.cpp
+
+---
+
+#### 3. Application Module (`app.h/cpp`)
+
+**Purpose:** High-level application logic coordinator
+
+**Features:**
+
+-   Application mode management (Interactive, Animation, Remote)
+-   Event handlers for all user interactions
+-   Color palette management
+-   Room Bus command processing
+-   Sound feedback coordination
+
+**Benefits:**
+
+-   All business logic in one place
+-   Clean event routing
+-   Easy to modify behavior
+
+---
+
+#### 4. Refactored Main (`main.cpp`)
+
+**Before:** ~300 lines of mixed hardware and logic code  
+**After:** ~160 lines of clean initialization and delegation
+
+**Structure:**
+
+-   Hardware objects section
+-   Application modules section
+-   ISR section
+-   Setup: Initialize all modules
+-   Loop: Delegate to modules (15 lines)
+
+**Benefits:**
+
+-   Clean, readable, self-documenting
+-   Easy to understand flow
+-   Minimal cognitive load
+
+---
+
+### Critical Bug Fixes
+
+#### 1. Pixel Update Flag Bug
+
+**Issue:** `if (~ pixelUpdateFlag)` should be `if (pixelUpdateFlag)`  
+**Fix:** Changed bitwise NOT to proper boolean check  
+**Impact:** Pixel updates now work correctly
+
+#### 2. Button Press Conflicts
+
+**Issue:** Short press and long press both triggered  
+**Root Cause:** `keyPressed()` fires immediately on press, before long press threshold  
+**Fix:** Use `keyReleased()` with `wasLongPress` tracking  
+**Impact:** Clean separation of short/long press events
+
+#### 3. Missing Pixel Display Updates
+
+**Issue:** Colors set but not displayed  
+**Root Cause:** Missing `pixels.show()` calls after manual color changes  
+**Fix:** Added `pixels.show()` in button handlers  
+**Impact:** Color changes now visible immediately
+
+#### 4. I2C Error Spam
+
+**Issue:** Continuous I2C errors when expander not connected  
+**Root Cause:** Polling I/O expander every 10ms even when not present  
+**Fix:** Check I/O expander presence at startup, disable polling if absent  
+**Impact:** Clean serial output, graceful degradation
+
+---
+
+### API Improvements
+
+#### Static Array Definitions
+
+**Issue:** `static constexpr` arrays in headers caused linker errors  
+**Fix:** Moved to source files with proper external linkage  
+**Files:** `app.cpp` - kColors[], kNoteMap[]
+
+#### Include Dependencies
+
+**Issue:** Missing color constant definitions  
+**Fix:** Added `#include "colors.h"` to app.h
+
+---
+
+### Performance & Behavior
+
+#### Current System Behavior
+
+**Short Press (BTN1):** Cycle color backward + sound  
+**Short Press (BTN2):** Cycle rainbow pattern forward + sound  
+**Long Press (either):** Toggle animation on/off  
+**Keypad:** Play musical notes (if I/O expander present)  
+**Room Bus:** Remote color control
+
+#### Timing Characteristics
+
+-   ISR frequency: 200 Hz (5ms interval)
+-   Button update: 200 Hz (in ISR)
+-   Pixel refresh: 25 Hz (40ms interval)
+-   Animation step: 20 Hz (50ms per step)
+-   Main loop: ~100 Hz (10ms delay)
+-   I/O expander poll: 100 Hz (when present)
+
+---
+
+### Code Quality Improvements
+
+**Modularity:**
+
+-   Each module has single, clear responsibility
+-   Well-defined interfaces
+-   Low coupling, high cohesion
+
+**Extensibility:**
+
+-   New animation: Add to Animation module
+-   New input: Extend InputHandler
+-   New behavior: Add handler in Application
+-   New hardware: Initialize in main.cpp
+
+**Maintainability:**
+
+-   Changes localized to specific modules
+-   Easy to understand code flow
+-   Self-documenting structure
+
+**Reliability:**
+
+-   Graceful degradation (I/O expander optional)
+-   Proper ISR safety (IRAM_ATTR, volatile)
+-   Watchdog protection
+-   Clean error handling
+
+---
+
+### Documentation
+
+**New Files:**
+
+-   `REFACTORING.md` - Complete architecture documentation
+-   Updated `CHANGELOG.md` - This document
+
+**Code Comments:**
+
+-   Section headers in main.cpp
+-   Function documentation
+-   Architecture explanations
+
+---
+
+### Testing Results
+
+✅ Compiles without errors or warnings  
+✅ Buttons trigger color changes correctly  
+✅ Long press toggles animation  
+✅ Short/long press properly separated  
+✅ Animation runs smoothly  
+✅ Watchdog doesn't trigger  
+✅ Clean serial output (no I2C spam)  
+✅ Works with or without I/O expander  
+✅ Keypad plays notes (when expander present)  
+✅ Room Bus commands work
+
+---
+
+## Previous Updates - November 29, 2025
 
 ### Major Improvements
 

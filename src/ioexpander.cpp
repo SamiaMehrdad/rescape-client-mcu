@@ -13,7 +13,7 @@
 IOExpander::IOExpander(u8 address, TwoWire *wire)
     : _address(address), _outputState(0xFFFF) // All pins high by default (pull-ups)
       ,
-      _inputState(0x0000), _wire(wire), _lastKeyIndex(255), _lastKeyRow(0xFF), _lastKeyCol(0xFF), _lastKey(0), _keyPressed(false),
+      _inputState(0x0000), _wire(wire), _isPresent(false), _lastKeyIndex(255), _lastKeyRow(0xFF), _lastKeyCol(0xFF), _lastKey(0), _keyPressed(false),
       _stableKeyIndex(255), _rawKeyIndex(255), _debounceCount(0), _lastScanTime(0)
 {
 }
@@ -32,6 +32,7 @@ bool IOExpander::begin()
         // Try to write initial state to verify device presence
         if (!writePort(_outputState))
         {
+                _isPresent = false;
                 return false; // Device not found
         }
 
@@ -39,9 +40,11 @@ bool IOExpander::begin()
         u16 readback;
         if (!readPort(readback))
         {
+                _isPresent = false;
                 return false; // Communication failed
         }
 
+        _isPresent = true;
         return true;
 }
 

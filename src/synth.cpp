@@ -2,6 +2,26 @@
 #include <math.h>
 #include <algorithm>
 
+//============================================================================
+// CONFIGURATION
+//============================================================================
+
+// Sound preset lookup table [preset][waveform, attack, decay, sustain, release]
+static const u16 SOUND_PRESETS[][5] = {
+    {WAVE_TRIANGLE, 5, 80, 50, 120},    // SOUND_PLUCK: Triangle, quick percussive
+    {WAVE_SINE, 150, 200, 180, 300},    // SOUND_SOFT_PAD: Sine, gentle pad
+    {WAVE_SQUARE, 0, 0, 255, 50},       // SOUND_ORGAN: Square, instant sustain
+    {WAVE_TRIANGLE, 10, 150, 120, 200}, // SOUND_PIANO: Triangle, natural decay
+    {WAVE_NOISE, 1, 30, 0, 50},         // SOUND_PERCUSSION: Noise, very short
+    {WAVE_SQUARE, 0, 5, 200, 10},       // SOUND_BEEP: Square, instant beep
+    {WAVE_SAWTOOTH, 20, 100, 150, 150}, // SOUND_SYNTH_LEAD: Sawtooth, balanced
+    {WAVE_TRIANGLE, 5, 120, 100, 180}   // SOUND_DEFAULT: Triangle, general purpose
+};
+
+//============================================================================
+// ISR AND GLOBAL INSTANCE
+//============================================================================
+
 static Synth *synthInstance = nullptr;
 
 void IRAM_ATTR sampleTimerISR()
@@ -11,6 +31,10 @@ void IRAM_ATTR sampleTimerISR()
                 synthInstance->updateSample();
         }
 }
+
+//============================================================================
+// CONSTRUCTOR
+//============================================================================
 
 Synth::Synth(u8 outputPin, u8 pwmChannel)
     : pin(outputPin), channel(pwmChannel), sampleRate(8000),
@@ -24,6 +48,23 @@ Synth::Synth(u8 outputPin, u8 pwmChannel)
         envelope.releaseMs = 100;
 
         synthInstance = this;
+}
+
+//============================================================================
+// PUBLIC METHODS
+//============================================================================
+
+void Synth::init(SoundPreset preset)
+{
+        begin(20000); // Fixed 20kHz sample rate for optimal quality
+        setSoundPreset(preset);
+}
+
+void Synth::setSoundPreset(SoundPreset preset)
+{
+        const u16 *params = SOUND_PRESETS[preset];
+        setWaveform(static_cast<Waveform>(params[0]));
+        setADSR(params[1], params[2], params[3], params[4]);
 }
 
 void Synth::begin(u16 sampleRateHz)
@@ -53,6 +94,10 @@ void Synth::setADSR(u16 attack, u16 decay, u8 sustain, u16 release)
         envelope.sustainLevel = std::min<u8>(255, sustain);
         envelope.releaseMs = release;
 }
+
+//============================================================================
+// WAVEFORM GENERATION
+//============================================================================
 
 u8 Synth::generateSample(float phase)
 {
@@ -90,6 +135,10 @@ u8 Synth::generateSample(float phase)
 
         return sample;
 }
+
+//============================================================================
+// ADSR ENVELOPE
+//============================================================================
 
 u8 Synth::getEnvelopeAmplitude(u32 timeMs)
 {
@@ -154,6 +203,10 @@ bool Synth::isPlaying()
 {
         return playing;
 }
+
+//============================================================================
+// SAMPLE GENERATION (ISR)
+//============================================================================
 
 void IRAM_ATTR Synth::updateSample()
 {

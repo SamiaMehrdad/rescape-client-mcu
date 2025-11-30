@@ -64,6 +64,7 @@ private:
         u16 _outputState; // Current output state (cached)
         u16 _inputState;  // Current input state (last read)
         TwoWire *_wire;   // I2C interface
+        bool _isPresent;  // Device presence flag
 
         // Keypad scanning state
         u8 _lastKeyIndex; // Last detected key index (0-15, 255 if none)
@@ -96,6 +97,12 @@ public:
          * @return true if successful, false if device not found
          */
         bool begin();
+
+        /**
+         * Check if device is present and responding
+         * @return true if device is present
+         */
+        bool isPresent() const { return _isPresent; }
 
         // ========== Pin Control Methods ==========
 
