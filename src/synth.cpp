@@ -1,3 +1,10 @@
+/************************* synth.cpp ***************************
+ * Audio Synthesizer Implementation
+ * PWM-based audio synthesis with ADSR envelope
+ * Created by MSK, November 2025
+ * Supports multiple waveforms and sound presets
+ ***************************************************************/
+
 #include "synth.h"
 #include <math.h>
 #include <algorithm>

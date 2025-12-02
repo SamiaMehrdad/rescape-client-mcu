@@ -1,7 +1,9 @@
-/*
-    re-escape room project
-    pixel.cpp - Pixel strip helper implementation
-*/
+/************************* pixel.cpp ***************************
+ * WS2812B LED Strip Control Implementation
+ * Pixel strip helper with grouping and buffer support
+ * Created by MSK, November 2025
+ * Supports logical grouping and animation buffering
+ ***************************************************************/
 
 #include "pixel.h"
 

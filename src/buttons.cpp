@@ -1,3 +1,10 @@
+/************************* buttons.cpp *************************
+ * Button Debouncing and State Management
+ * Professional button handling with short and long press detection
+ * Created by MSK, November 2025
+ * Uses 3-read debouncing for reliable input detection
+ ***************************************************************/
+
 #include "buttons.h"
 
 // Button state shared across modules

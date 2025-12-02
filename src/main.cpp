@@ -1,3 +1,10 @@
+/************************* main.cpp ****************************
+ * Escape Room Client - Main Application Entry Point
+ * ESP32-based client controller for escape room automation
+ * Created by MSK, November 2025
+ * Core + App architecture with device type configuration system
+ ***************************************************************/
+
 // Board selection is now configured in platformio.ini via build_flags
 // #define SEEED_XIAO_ESP32C3
 // #define S2_MINI

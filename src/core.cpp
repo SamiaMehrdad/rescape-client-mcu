@@ -1,5 +1,44 @@
+/************************* core.cpp ****************************
+ * Core Firmware Implementation
+ * Handles device type configuration, mode management, and hardware control
+ * Created by MSK, November 2025
+ * Architecture: Core (firmware) + App (high-level) separation
+ ***************************************************************/
+
 #include "core.h"
 #include <Arduino.h>
+
+//============================================================================
+// CONFIGURATION CONSTANTS
+//============================================================================
+
+// ADC configuration for device type detection
+namespace ADCConfig
+{
+        constexpr int DISCONNECT_THRESHOLD = 30; // ADC value below this = disconnected pot
+        constexpr int NOISE_THRESHOLD = 200;     // ADC range above this = noisy/bad connection
+        constexpr int NUM_SAMPLES = 32;          // Number of ADC samples to average
+        constexpr int STEP_SIZE = 64;            // ADC units per device type (4096/64 = 64 types)
+        constexpr int PIN_STABILIZE_MS = 10;     // Delay after pinMode change (ms)
+        constexpr int SAMPLE_DELAY_US = 100;     // Delay between ADC samples (microseconds)
+}
+
+// Device type limits
+namespace TypeLimits
+{
+        constexpr u8 MAX_CURRENT_TYPE = 31; // Current maximum type (5-bit, 0-31)
+        constexpr u8 MAX_FUTURE_TYPE = 63;  // Future maximum type (6-bit, 0-63)
+        constexpr u8 INVALID_TYPE = 0xFF;   // Marker for invalid/disconnected
+}
+
+// Type detection mode timing
+namespace DetectionTiming
+{
+        constexpr u32 READ_INTERVAL_MS = 500; // How often to read ADC in detection mode (ms)
+        constexpr u32 LED_FLASH_MS = 100;     // LED flash duration (ms)
+        constexpr u32 ERROR_BLINK_MS = 50;    // Error pattern blink duration (ms)
+        constexpr u32 INITIAL_DELAY_MS = 500; // Delay before first reading in detection mode
+}
 
 //============================================================================
 // STATIC DATA
@@ -146,15 +185,18 @@ void Core::update()
 
 u8 Core::readDeviceType(bool verbose)
 {
+        using namespace ADCConfig;
+        using namespace TypeLimits;
+
         // First, check for disconnected pot using pull-down
         pinMode(CONFIG_ADC_PIN, INPUT_PULLDOWN);
-        delay(10); // Allow pull-down to stabilize
+        delay(PIN_STABILIZE_MS); // Allow pull-down to stabilize
 
         int checkReading = analogRead(CONFIG_ADC_PIN);
 
         // If reading is very low, pot is likely disconnected
-        // Threshold set to 30 (well below TYPE_00 range of 0-63)
-        if (checkReading < 30)
+        // Threshold set well below TYPE_00 range (0-63)
+        if (checkReading < DISCONNECT_THRESHOLD)
         {
                 if (verbose)
                 {
@@ -162,21 +204,20 @@ u8 Core::readDeviceType(bool verbose)
                         Serial.print(checkReading);
                         Serial.println(" (range: -) -> DISCONNECTED/INVALID");
                 }
-                return 0xFF; // Disconnected
+                return INVALID_TYPE; // Disconnected
         }
 
         // Pot appears connected - switch to normal INPUT mode for accurate reading
         // This prevents pull-down from affecting the voltage divider
         pinMode(CONFIG_ADC_PIN, INPUT);
-        delay(10); // Allow pin to stabilize without pull-down
+        delay(PIN_STABILIZE_MS); // Allow pin to stabilize without pull-down
 
         // Take multiple readings and average for stability
-        const int numSamples = 32; // More samples for 5-bit precision
         int sum = 0;
         int minReading = 4095;
         int maxReading = 0;
 
-        for (int i = 0; i < numSamples; i++)
+        for (int i = 0; i < NUM_SAMPLES; i++)
         {
                 int reading = analogRead(CONFIG_ADC_PIN);
                 sum += reading;
@@ -186,14 +227,14 @@ u8 Core::readDeviceType(bool verbose)
                 if (reading > maxReading)
                         maxReading = reading;
 
-                delayMicroseconds(100);
+                delayMicroseconds(SAMPLE_DELAY_US);
         }
 
-        int adcValue = sum / numSamples;
+        int adcValue = sum / NUM_SAMPLES;
         int adcRange = maxReading - minReading;
 
         // Check for excessive noise (bad connection)
-        bool isNoisy = (adcRange > 200);
+        bool isNoisy = (adcRange > NOISE_THRESHOLD);
 
         // Only log if verbose mode is enabled
         if (verbose)
@@ -207,14 +248,14 @@ u8 Core::readDeviceType(bool verbose)
                 if (isNoisy)
                 {
                         Serial.println(" -> NOISY/INVALID");
-                        return 0xFF; // Invalid reading
+                        return INVALID_TYPE; // Invalid reading
                 }
         }
 
         // If noisy in non-verbose mode, still return invalid
         if (isNoisy)
         {
-                return 0xFF;
+                return INVALID_TYPE;
         }
 
         // Convert ADC value to device type (0-31 for 5-bit, expandable to 0-63 for 6-bit)
@@ -222,12 +263,12 @@ u8 Core::readDeviceType(bool verbose)
         // Using step size of 64 (instead of 128) allows future expansion to 64 types
         // Current implementation: Uses types 0-31 (lower half)
         // Future expansion: Can use types 32-63 (upper half) without firmware changes
-        u8 deviceType = adcValue / 64; // 4096 / 64 = 64 possible types
+        u8 deviceType = adcValue / STEP_SIZE; // 4096 / 64 = 64 possible types
 
         // Currently clamp to 0-31 range (5-bit addressing)
         // Remove this clamp in future to enable full 0-63 range (6-bit addressing)
-        if (deviceType > 31)
-                deviceType = 31;
+        if (deviceType > MAX_CURRENT_TYPE)
+                deviceType = MAX_CURRENT_TYPE;
 
         if (verbose)
         {
@@ -358,33 +399,78 @@ void Core::printBootReport()
 
 void Core::saveDeviceType(u8 type)
 {
-        // Clamp to valid range
-        if (type > 31)
-                type = 31;
+        using namespace TypeLimits;
 
-        m_preferences.putUChar("deviceType", type);
-        Serial.print("Device type ");
-        Serial.print(type);
-        Serial.println(" saved to NVS.");
+        // Validate and clamp to valid range
+        if (type > MAX_CURRENT_TYPE && type != INVALID_TYPE)
+        {
+                Serial.print("WARNING: Device type ");
+                Serial.print(type);
+                Serial.print(" out of range. Clamping to ");
+                Serial.println(MAX_CURRENT_TYPE);
+                type = MAX_CURRENT_TYPE;
+        }
+
+        // Don't save invalid type
+        if (type == INVALID_TYPE)
+        {
+                Serial.println("ERROR: Cannot save invalid device type to NVS.");
+                return;
+        }
+
+        // Save to NVS
+        size_t bytesWritten = m_preferences.putUChar("deviceType", type);
+        if (bytesWritten == 0)
+        {
+                Serial.println("ERROR: Failed to save device type to NVS!");
+        }
+        else
+        {
+                Serial.print("Device type ");
+                Serial.print(type);
+                Serial.println(" saved to NVS.");
+        }
 }
 
 u8 Core::loadDeviceType()
 {
-        // Returns 0xFF if key doesn't exist (first boot or after factory reset)
-        return m_preferences.getUChar("deviceType", 0xFF);
+        using namespace TypeLimits;
+
+        // Returns INVALID_TYPE (0xFF) if key doesn't exist (first boot or after factory reset)
+        u8 type = m_preferences.getUChar("deviceType", INVALID_TYPE);
+
+        // Validate loaded type
+        if (type != INVALID_TYPE && type > MAX_CURRENT_TYPE)
+        {
+                Serial.print("WARNING: Loaded invalid device type ");
+                Serial.print(type);
+                Serial.println(" from NVS. Treating as unconfigured.");
+                return INVALID_TYPE;
+        }
+
+        return type;
 }
 
 void Core::clearStoredDeviceType()
 {
-        m_preferences.remove("deviceType");
-        Serial.println("Stored device type cleared (factory reset).");
-        Serial.println("Reboot to read device type from ADC.");
+        bool success = m_preferences.remove("deviceType");
+        if (success)
+        {
+                Serial.println("Stored device type cleared (factory reset).");
+                Serial.println("Reboot to read device type from ADC.");
+        }
+        else
+        {
+                Serial.println("WARNING: Failed to clear device type from NVS.");
+        }
 }
 
 const char *Core::getDeviceTypeName() const
 {
+        using namespace TypeLimits;
+
         // Ensure device type is in valid range
-        if (m_deviceType > 31)
+        if (m_deviceType > MAX_FUTURE_TYPE)
                 return "INVALID";
 
         return kDeviceTypeNames[m_deviceType];
@@ -396,6 +482,15 @@ const char *Core::getDeviceTypeName() const
 
 void Core::setMode(CoreMode mode)
 {
+        // Validate mode
+        if (mode != MODE_INTERACTIVE && mode != MODE_ANIMATION &&
+            mode != MODE_REMOTE && mode != MODE_TYPE_DETECTION)
+        {
+                Serial.print("ERROR: Invalid mode ");
+                Serial.println((int)mode);
+                return;
+        }
+
         m_mode = mode;
 
         switch (mode)
@@ -412,6 +507,10 @@ void Core::setMode(CoreMode mode)
         case MODE_REMOTE:
                 m_animation->stop();
                 Serial.println("Mode: REMOTE");
+                break;
+
+        case MODE_TYPE_DETECTION:
+                // Don't log here - enterTypeDetectionMode() handles it
                 break;
         }
 }
@@ -571,6 +670,14 @@ void Core::handleRoomBusFrame(const RoomFrame &frame)
 
 void Core::setStatusLed(StatusLedMode mode)
 {
+        // Validate mode
+        if (mode != STATUS_OK && mode != STATUS_I2C_ERROR && mode != STATUS_TYPE_ERROR)
+        {
+                Serial.print("ERROR: Invalid status LED mode ");
+                Serial.println((int)mode);
+                return;
+        }
+
         m_statusLedMode = mode;
         m_lastLedToggle = millis();
 
@@ -635,10 +742,13 @@ void Core::updateStatusLed()
 
 void Core::enterTypeDetectionMode()
 {
+        using namespace DetectionTiming;
+        using namespace TypeLimits;
+
         Serial.println("\n=== ENTERING TYPE DETECTION MODE ===");
         Serial.println("Adjust trimmer pot to select device type (0-31)");
         Serial.println("Type changes will be logged automatically.");
-        Serial.println("LED flashes once per reading (every 1 second).");
+        Serial.println("LED flashes once per reading (every 0.5 seconds).");
         Serial.println("Long press button again to exit.\n");
 
         // Save current mode to restore later
@@ -659,12 +769,12 @@ void Core::enterTypeDetectionMode()
         m_pixels->show();
 
         // Initialize type detection state
-        m_lastTypeRead = millis() - 500; // Start halfway to first read (read after 500ms instead of immediate)
+        m_lastTypeRead = millis() - READ_INTERVAL_MS + INITIAL_DELAY_MS; // Read after 500ms instead of immediate
         m_typeDetectionBlink = false;
 
         // Keep current device type - don't change it until we get a valid reading
-        // Initialize last detected to 0xFF to force first valid reading to be logged
-        m_lastDetectedType = 0xFF;
+        // Initialize last detected to INVALID to force first valid reading to be logged
+        m_lastDetectedType = INVALID_TYPE;
 
         // Turn off status LED (will be used for reading flash only)
         digitalWrite(STATUS_LED_PIN, LOW);
@@ -672,10 +782,12 @@ void Core::enterTypeDetectionMode()
 
 void Core::exitTypeDetectionMode()
 {
+        using namespace TypeLimits;
+
         Serial.println("\n=== EXITING TYPE DETECTION MODE ===");
 
         // Check if current reading is valid before saving
-        if (m_deviceType == 0xFF)
+        if (m_deviceType == INVALID_TYPE)
         {
                 Serial.println("ERROR: Invalid device type detected!");
                 Serial.println("Potentiometer may be disconnected.");
@@ -720,10 +832,13 @@ void Core::exitTypeDetectionMode()
 
 void Core::updateTypeDetectionMode()
 {
+        using namespace DetectionTiming;
+        using namespace TypeLimits;
+
         u32 now = millis();
 
-        // Read device type every 500ms (0.5 seconds)
-        if (now - m_lastTypeRead >= 500)
+        // Read device type at specified interval
+        if (now - m_lastTypeRead >= READ_INTERVAL_MS)
         {
                 m_lastTypeRead = now;
 
@@ -731,21 +846,17 @@ void Core::updateTypeDetectionMode()
                 u8 newType = readDeviceType(false);
 
                 // Check if reading is valid
-                if (newType == 0xFF)
+                if (newType == INVALID_TYPE)
                 {
                         // Invalid/disconnected - warn but don't change stored type
-                        if (m_lastDetectedType != 0xFF) // Only warn once
+                        if (m_lastDetectedType != INVALID_TYPE) // Only warn once
                         {
                                 Serial.println("WARNING: Potentiometer disconnected or invalid reading!");
                                 Serial.println("Reconnect potentiometer to continue calibration.");
-                                m_lastDetectedType = 0xFF; // Mark as invalid state
+                                m_lastDetectedType = INVALID_TYPE; // Mark as invalid state
                         }
 
-                        // Flash LED in error pattern (fast double blink)
-                        digitalWrite(STATUS_LED_PIN, HIGH);
-                        delay(50);
-                        digitalWrite(STATUS_LED_PIN, LOW);
-                        delay(50);
+                        // Flash LED in error pattern - set initial state, will be handled by non-blocking code
                         digitalWrite(STATUS_LED_PIN, HIGH);
                         m_typeDetectionBlink = true;
 
@@ -760,7 +871,7 @@ void Core::updateTypeDetectionMode()
                         m_deviceType = newType;
 
                         // Log on first valid reading or when type changes
-                        if (m_lastDetectedType == 0xFF)
+                        if (m_lastDetectedType == INVALID_TYPE)
                         {
                                 // First valid reading in this calibration session
                                 Serial.print("Current type: ");
@@ -774,7 +885,7 @@ void Core::updateTypeDetectionMode()
                         {
                                 // Type changed from previous valid reading
                                 Serial.print("Type changed: ");
-                                Serial.print(kDeviceTypeNames[m_lastDetectedType > 31 ? 31 : m_lastDetectedType]);
+                                Serial.print(kDeviceTypeNames[m_lastDetectedType > MAX_CURRENT_TYPE ? MAX_CURRENT_TYPE : m_lastDetectedType]);
                                 Serial.print(" (");
                                 Serial.print(m_lastDetectedType);
                                 Serial.print(") -> ");
@@ -789,7 +900,7 @@ void Core::updateTypeDetectionMode()
                                 // Same as last reading - no log needed
                         }
 
-                        // Flash LED once (100ms pulse)
+                        // Flash LED once (LED_FLASH_MS pulse)
                         digitalWrite(STATUS_LED_PIN, HIGH);
                         m_typeDetectionBlink = true;
 
@@ -800,8 +911,8 @@ void Core::updateTypeDetectionMode()
                 }
         }
 
-        // Turn off LED after 100ms flash
-        if (m_typeDetectionBlink && (now - m_lastTypeRead >= 100))
+        // Turn off LED after flash duration
+        if (m_typeDetectionBlink && (now - m_lastTypeRead >= LED_FLASH_MS))
         {
                 digitalWrite(STATUS_LED_PIN, LOW);
                 m_typeDetectionBlink = false;

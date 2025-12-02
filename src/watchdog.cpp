@@ -1,3 +1,10 @@
+/************************* watchdog.cpp ************************
+ * Watchdog Timer Implementation
+ * Multi-platform watchdog support for system reliability
+ * Created by MSK, November 2025
+ * Supports ESP32, AVR, SAM, SAMD, and Teensy platforms
+ ***************************************************************/
+
 #include "watchdog.h"
 
 // ============================================================================

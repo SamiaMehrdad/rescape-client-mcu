@@ -1,3 +1,10 @@
+/************************* inputmanager.cpp ********************
+ * Input Manager Implementation
+ * Unified input handling for buttons, keypad, and switches
+ * Created by MSK, November 2025
+ * Provides event-driven input system with callbacks
+ ***************************************************************/
+
 #include "inputmanager.h"
 
 //============================================================================

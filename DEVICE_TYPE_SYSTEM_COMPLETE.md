@@ -1,348 +1,427 @@
-# Device Type Configuration System - Complete Implementation
+# Device Type System - Complete Guide
 
 ## Overview
 
-A robust device type configuration system for ESP32-C3 based escape room clients, supporting 32 different device types (0-31) configured via a trimmer potentiometer with persistent NVS storage.
+The device type configuration system allows each ESP32-C3 client to be configured as one of **64 device types** (0-63) using a trimmer potentiometer. Currently, types 0-31 are active, with types 32-63 reserved for future expansion.
 
-## System Architecture
+**Key Features:**
 
-### Hardware
+-   ✅ 64-type capacity (32 active, 32 reserved)
+-   ✅ Persistent storage (NVS - survives reboots)
+-   ✅ Real-time calibration mode with feedback
+-   ✅ Robust error handling (disconnected pot, noise, etc.)
+-   ✅ Boot report showing device configuration
+-   ✅ Status LED for system health
 
--   **MCU**: ESP32-C3 (Seeed XIAO)
--   **Configuration Input**: 10kΩ-25kΩ trimmer potentiometer on GPIO 2
--   **Status Indicator**: LED on GPIO 3
--   **User Interface**: Boot button on GPIO 9 (long-press for calibration)
+---
 
-### Firmware Layers
+## Hardware Setup
 
-```
-┌─────────────────────────────────────────┐
-│  Application Layer (Future)             │  ← Device-specific behavior
-│  - Door Controller, Window Sensor, etc. │
-├─────────────────────────────────────────┤
-│  Core Firmware (Current)                │  ← Generic device management
-│  - Type detection & storage             │
-│  - Hardware abstraction                 │
-│  - Communication protocols              │
-└─────────────────────────────────────────┘
-```
+### Components Required
 
-## Key Features
+| Component   | Specification   | Connection                                            |
+| ----------- | --------------- | ----------------------------------------------------- |
+| Trimmer Pot | 20kΩ multi-turn | Pin 1 → GND<br>Pin 2 (wiper) → GPIO 2<br>Pin 3 → 3.3V |
+| Status LED  | Any color       | Anode → GPIO 3<br>Cathode → GND (via resistor)        |
+| Boot Button | Built-in        | GPIO 9 (on-board)                                     |
 
-### 1. Persistent Storage (NVS)
+### ADC Configuration
 
--   Device type stored in non-volatile memory
--   Survives reboots and power cycles
--   One-time configuration with manual calibration option
--   Factory reset capability
+-   **GPIO 2** (ADC1_CH2) reads potentiometer voltage
+-   **ADC Range**: 0-4095 (12-bit resolution)
+-   **Step Size**: 64 ADC units per device type
+-   **Disconnect Threshold**: ADC < 30 = disconnected
+-   **Noise Threshold**: ADC range > 200 = bad connection
 
-### 2. Calibration Mode
+---
 
--   **Entry**: Long-press boot button (>1 second)
--   **Operation**: Adjust pot, see real-time type changes
--   **Feedback**: LED flash + beep on each reading
--   **Exit**: Long-press boot button again to save
+## Device Type Mapping
 
-### 3. Robust Edge Case Handling
-
--   ✅ Disconnected potentiometer detection
--   ✅ Invalid reading prevention
--   ✅ Type preservation during errors
--   ✅ Auto-recovery from transient issues
--   ✅ Clear error feedback (LED, serial, boot report)
-
-### 4. Boot Report
-
--   Comprehensive device information on every restart
--   Shows device type, configuration status, hardware info
--   Firmware version and build timestamp
--   MAC address and system resources
-
-## Implementation Details
-
-### ADC Mapping (Offset Design)
-
-**Valid Range**: ADC 200-4095 → TYPE_00 through TYPE_31
+### Current Implementation (32 Types)
 
 ```
-ADC Value     Device Type    Description
----------     -----------    -----------
-0-199         INVALID        Disconnected (pull-down active)
-200-321       TYPE_00        Valid minimum
-322-443       TYPE_01
-...           ...
-3974-4095     TYPE_31        Valid maximum
+ADC Range      → Device Type  → Status
+──────────────────────────────────────────
+0-29           → DISCONNECTED → Error (pull-down detection)
+30-63          → TYPE_00      → ✅ Active
+64-127         → TYPE_01      → ✅ Active
+128-191        → TYPE_02      → ✅ Active
+...
+1920-1983      → TYPE_30      → ✅ Active
+1984-2047      → TYPE_31      → ✅ Active
+2048-2111      → TYPE_32      → 🔒 Reserved
+2112-2175      → TYPE_33      → 🔒 Reserved
+...
+4032-4095      → TYPE_63      → 🔒 Reserved
 ```
 
-**Formula**: `deviceType = (adcValue - 200) / 122`
-
-**Why offset by 200?**
-
--   Disconnected pot (pull-down) reads ADC ~0-50
--   Creates clear separation between error and TYPE_00
--   TYPE_00 is now a valid configuration, not an error state
-
-### Validation Logic
+### Formula
 
 ```cpp
-bool isDisconnected = (adcValue < 200) ||   // Below valid range
-                      (adcRange > 200);      // Too unstable
+deviceType = adcValue / 64;  // Calculate 0-63
 
-// Three protections:
-1. ADC too low (<200) → Disconnected
-2. ADC too noisy (range >200) → Bad connection
-3. Invalid state (0xFF) → Error propagation
+// Current clamp (remove in future for 64 types)
+if (deviceType > 31)
+    deviceType = 31;
 ```
 
-### State Preservation
+### Future Expansion (64 Types)
+
+Simply remove the clamp to enable all 64 types:
 
 ```cpp
-// On entering calibration:
-m_typeBeforeCalibration = m_deviceType;  // Save current
+deviceType = adcValue / 64;  // Already supports 0-63!
 
-// On exiting with error:
-m_deviceType = m_typeBeforeCalibration;  // Restore original
+// Safety clamp at maximum
+if (deviceType > 63)
+    deviceType = 63;
 ```
 
-**Result**: Device type NEVER changes unless explicitly calibrated with valid readings.
+See [`64_TYPE_EXPANSION.md`](64_TYPE_EXPANSION.md) for complete expansion strategy.
 
-## Usage Scenarios
+---
 
-### First Boot (Pot Connected)
+## Calibration Mode
 
-```
-No stored device type found. Reading from ADC...
-Config ADC: 1536 (range: 12) -> Type 12 (TYPE_12)
-Device type 12 saved to NVS.
+### How to Enter
 
-╔════════════════════════════════════════╗
-║      ESCAPE ROOM CLIENT - BOOT REPORT  ║
-╚════════════════════════════════════════╝
-│ Device Type:       TYPE_12 (Index: 12)
-│ Configuration:     Stored in NVS
-```
+1. **Long-press** boot button (GPIO 9) for >1 second
+2. System enters type detection mode
+3. Serial output shows:
+    ```
+    === ENTERING TYPE DETECTION MODE ===
+    Adjust trimmer pot to select device type (0-31)
+    Type changes will be logged automatically.
+    LED flashes once per reading (every 0.5 seconds).
+    Long press button again to exit.
+    ```
 
-### First Boot (Pot Disconnected)
+### During Calibration
 
-```
-⚠️  WARNING: Cannot read device type from ADC!
-   Please check potentiometer connection.
+**Every 0.5 seconds:**
 
-╔════════════════════════════════════════╗
-║      ESCAPE ROOM CLIENT - BOOT REPORT  ║
-╚════════════════════════════════════════╝
-│ Device Type:       TYPE_00 (Index: 0)
-│ Configuration:     Not saved (temporary)
-│ Status LED:        TYPE ERROR (slow blink)
-```
+-   Reads ADC value from potentiometer
+-   Calculates current device type
+-   Shows on serial monitor:
+    ```
+    Config ADC: 1234 (range: 12) -> Type 19 (TYPE_19)
+    ```
+-   **LED flashes** once (100ms)
+-   **Beep** plays (50ms, A4 note)
 
-### Normal Boot (Previously Configured)
-
-```
-╔════════════════════════════════════════╗
-║      ESCAPE ROOM CLIENT - BOOT REPORT  ║
-╚════════════════════════════════════════╝
-│ Device Type:       TYPE_08 (Index: 8)
-│ Configuration:     Stored in NVS
-│ Operating Mode:    INTERACTIVE
-│ Status LED:        OK (solid ON)
-```
-
-### Calibration Mode (Success)
+**Type changes are logged:**
 
 ```
-=== ENTERING TYPE DETECTION MODE ===
-Current type: TYPE_08 (8)
-Type changed: TYPE_08 (8) -> TYPE_12 (12)
-Type changed: TYPE_12 (12) -> TYPE_15 (15)
-
-=== EXITING TYPE DETECTION MODE ===
-Final Device Type: TYPE_15 (15)
-Device type 15 saved to NVS.
+Type changed: TYPE_18 (18) -> TYPE_19 (19)
+Type changed: TYPE_19 (19) -> TYPE_20 (20)
 ```
 
-### Calibration Mode (Pot Disconnected)
+### How to Exit
+
+1. **Long-press** boot button again (>1 second)
+2. System saves to NVS and exits:
+    ```
+    === EXITING TYPE DETECTION MODE ===
+    Config ADC: 1234 -> Type 19
+    Final Device Type: 19
+    Device type 19 saved to NVS.
+    ```
+3. Status LED returns to normal mode
+
+### Visual Feedback
+
+| LED Pattern       | Meaning                            |
+| ----------------- | ---------------------------------- |
+| Flash every 0.5s  | Normal calibration (valid reading) |
+| Solid OFF         | Invalid/disconnected pot           |
+| Solid ON          | Exited - all OK                    |
+| Fast blink (5 Hz) | I2C communication error            |
+| Slow blink (1 Hz) | Invalid device type stored         |
+
+---
+
+## Error Handling
+
+### Edge Cases Handled
+
+| Scenario              | Detection                   | Behavior                                      |
+| --------------------- | --------------------------- | --------------------------------------------- |
+| **Disconnected Pot**  | ADC < 30 with pull-down     | Returns 0xFF (invalid), shows "DISCONNECTED"  |
+| **Noisy Connection**  | ADC range > 200             | Returns 0xFF (invalid), shows "NOISY/INVALID" |
+| **Calibration Error** | Invalid reading during exit | Restores previous type, does NOT save         |
+| **First Boot**        | No NVS entry                | Reads ADC, saves initial type                 |
+| **Corrupt NVS**       | Type > 31                   | Treats as unconfigured, re-reads ADC          |
+
+### Two-Phase Detection
+
+To prevent pull-down from interfering with ADC readings:
+
+**Phase 1: Disconnect Check**
+
+```cpp
+pinMode(CONFIG_ADC_PIN, INPUT_PULLDOWN);
+if (analogRead(CONFIG_ADC_PIN) < 30) {
+    return INVALID;  // Disconnected
+}
+```
+
+**Phase 2: Accurate Reading**
+
+```cpp
+pinMode(CONFIG_ADC_PIN, INPUT);  // No pull-down
+adcValue = averageOf32Samples();
+deviceType = adcValue / 64;
+```
+
+This allows:
+
+-   ✅ TYPE_00 (ADC 0-63) is valid and accessible
+-   ✅ Disconnected pot properly detected (ADC < 30)
+-   ✅ No voltage divider interference from pull-down
+
+---
+
+## Persistent Storage (NVS)
+
+### Namespace and Key
+
+```cpp
+Preferences preferences;
+preferences.begin("core", false);  // namespace: "core"
+
+// Save
+preferences.putUChar("deviceType", type);
+
+// Load (returns 0xFF if not found)
+u8 type = preferences.getUChar("deviceType", 0xFF);
+```
+
+### Boot Sequence
 
 ```
-=== ENTERING TYPE DETECTION MODE ===
-WARNING: Potentiometer disconnected or invalid reading!
-Reconnect potentiometer to continue calibration.
-
-=== EXITING TYPE DETECTION MODE ===
-ERROR: Invalid device type detected!
-Potentiometer may be disconnected.
-Device type NOT CHANGED in NVS.
-Restored previous type: TYPE_08 (8)
+1. Initialize NVS
+2. Try loading type from NVS
+   ├─ Found (0-31) → Use stored type ✅
+   ├─ Not found (0xFF) → Read from ADC, save to NVS
+   └─ Invalid (>31) → Treat as unconfigured
+3. Print boot report
+4. Continue normal operation
 ```
 
-## Status LED Indicators
+### Factory Reset
 
-| Pattern                    | Meaning           | Condition                             |
-| -------------------------- | ----------------- | ------------------------------------- |
-| Solid ON                   | STATUS_OK         | Normal operation, all systems good    |
-| Fast blink (5Hz)           | STATUS_I2C_ERROR  | I/O expander communication failed     |
-| Slow blink (1Hz)           | STATUS_TYPE_ERROR | Device type configuration error       |
-| Single flash (calibration) | Normal reading    | Valid ADC reading in calibration mode |
-| Double flash (calibration) | Error reading     | Disconnected pot in calibration mode  |
+Clear stored device type:
 
-## Audio Feedback
+```cpp
+core.clearStoredDeviceType();
+// Reboots and re-reads from ADC
+```
 
-| Tone           | Duration        | Meaning                             |
-| -------------- | --------------- | ----------------------------------- |
-| NOTE_A4, 50ms  | Short high beep | Valid type reading in calibration   |
-| NOTE_C4, 100ms | Longer low beep | Invalid/disconnected in calibration |
-| NOTE_C5, 100ms | Medium beep     | Exiting calibration mode            |
+---
+
+## Boot Report
+
+On every startup, device displays comprehensive information:
+
+```
+╔════════════════════════════════════════════════════════════╗
+║           ESCAPE ROOM CLIENT - BOOT REPORT                ║
+╚════════════════════════════════════════════════════════════╝
+
+┌─ DEVICE CONFIGURATION ─────────────────────────────────────┐
+│ Device Type:       TYPE_19 (19)
+│ Config Source:     NVS (stored configuration)
+│ Config ADC:        1234
+│ Status:            ✓ Configuration valid
+└────────────────────────────────────────────────────────────┘
+
+┌─ HARDWARE INFO ────────────────────────────────────────────┐
+│ Board:             Seeed XIAO ESP32-C3
+│ Chip Model:        ESP32-C3
+│ Chip Revision:     0.3
+│ CPU Frequency:     160 MHz
+│ Flash Size:        4 MB
+│ Free Heap:         312 KB
+│ MAC Address:       AA:BB:CC:DD:EE:FF
+└────────────────────────────────────────────────────────────┘
+
+┌─ FIRMWARE INFO ────────────────────────────────────────────┐
+│ Name:              Escape Room Client Core Firmware
+│ Version:           1.0.0
+│ Build Date:        Dec  1 2025 14:23:45
+│ Architecture:      Core + App separation
+└────────────────────────────────────────────────────────────┘
+
+ℹ️  To reconfigure device type: Long-press boot button
+ℹ️  Device ready for operation
+```
+
+---
 
 ## API Reference
 
 ### Core Class Methods
 
 ```cpp
-// Get current device type (0-31)
+// Get current device type (0-31, or 0xFF if invalid)
 u8 getDeviceType() const;
 
-// Get device type name (e.g., "TYPE_12")
+// Get device type name ("TYPE_00" through "TYPE_63")
 const char* getDeviceTypeName() const;
 
-// Print comprehensive boot report
-void printBootReport();
+// Read device type from ADC (bypasses NVS)
+u8 readDeviceType(bool verbose = true);
 
-// Storage operations
+// Save device type to NVS
 void saveDeviceType(u8 type);
+
+// Load device type from NVS (returns 0xFF if not found)
 u8 loadDeviceType();
-void clearStoredDeviceType();  // Factory reset
+
+// Clear stored type (factory reset)
+void clearStoredDeviceType();
+
+// Print boot report
+void printBootReport();
 ```
 
-### Device Type Names
-
-Default placeholder names at Core firmware level:
+### Usage Example
 
 ```cpp
-const char* kDeviceTypeNames[32] = {
-    "TYPE_00", "TYPE_01", ..., "TYPE_31"
-};
-```
+// In your application code:
+u8 type = core.getDeviceType();
 
-Application layer can override with meaningful names:
-
-```cpp
-// In your App layer
-const char* getAppTypeName(u8 type) {
-    static const char* names[] = {
-        "Door Controller",
-        "Window Sensor",
-        "RGB Light Strip",
-        ...
-    };
-    return names[type];
+if (type == 5) {
+    // Custom behavior for TYPE_05
+    Serial.println("Door Lock Controller");
+} else if (type == 10) {
+    // Custom behavior for TYPE_10
+    Serial.println("Window Sensor");
 }
 ```
 
-## Error Handling Matrix
+---
 
-| Scenario                     | Detection              | Action                     | Result                      |
-| ---------------------------- | ---------------------- | -------------------------- | --------------------------- |
-| First boot, pot disconnected | ADC <200               | Use TYPE_00, don't save    | Error LED, temporary config |
-| Normal boot, stored type OK  | NVS valid              | Load from NVS              | Normal operation            |
-| Calibration, pot disconnects | ADC <200 or range >200 | Warning, don't update type | Type preserved              |
-| Exit calibration with error  | m_deviceType == 0xFF   | Restore saved type         | Original config preserved   |
-| Noisy connection             | Range >200             | Reject as invalid          | Type unchanged              |
+## Type Naming Convention
 
-## Technical Specifications
+### Firmware Level (Core)
 
-### ADC Configuration
+Generic placeholder names:
 
--   **Resolution**: 12-bit (0-4095)
--   **Pin Mode**: INPUT_PULLDOWN (internal ~50kΩ)
--   **Sampling**: 32 readings averaged for stability
--   **Sample Interval**: 100μs between readings
+```cpp
+"TYPE_00", "TYPE_01", ... "TYPE_63"
+```
 
-### Valid Operating Range
+### Application Level (App)
 
--   **Minimum ADC**: 200 (disconnected if below)
--   **Maximum ADC**: 4095
--   **Step Size**: ~122 ADC units per type
--   **Maximum Noise**: 200 ADC units (rejected if higher)
+Override with meaningful names:
 
-### NVS Storage
-
--   **Namespace**: "core"
--   **Key**: "deviceType"
--   **Type**: uint8_t (0-31, or 0xFF for invalid)
--   **Lifetime**: 100,000+ write cycles
-
-## Files Modified/Created
-
-### Core Firmware Files
-
--   `include/core.h` - Core class interface
--   `src/core.cpp` - Core implementation
--   `src/main.cpp` - Boot sequence and hardware init
-
-### Documentation
-
--   `DEVICE_TYPE_ARCHITECTURE.md` - System architecture and App integration
--   `NVS_DEVICE_TYPE_STORAGE.md` - Persistent storage details
--   `EDGE_CASE_HANDLING.md` - Error scenarios and handling
--   `BOOT_REPORT.md` - Boot report feature documentation
--   `ADC_VALIDATION_FIX.md` - TYPE_04 bug fix details
--   `ADC_OFFSET_MAPPING.md` - ADC offset design rationale
-
-## Testing Checklist
-
--   [x] First boot with pot connected → Reads and saves type
--   [x] First boot with pot disconnected → Error state, not saved
--   [x] Normal boot with stored type → Loads from NVS
--   [x] Calibration mode entry/exit → Type changes saved
--   [x] Calibration with pot disconnect → Type preserved
--   [x] Exit calibration with invalid reading → Restores original
--   [x] Multiple calibration cycles → Type stable when pot disconnected
--   [x] TYPE_00 configuration → Valid, distinguishable from error
--   [x] All 32 types accessible → ADC 200-4095 maps correctly
--   [x] Boot report accuracy → Shows correct status
-
-## Future Enhancements
-
-### Planned
-
--   Application-specific type names via App layer
--   Multiple device profiles per type
--   Remote configuration via Room Bus
--   Type history logging for diagnostics
-
-### Possible
-
--   Auto-detection based on hardware probing
--   Over-the-air type reconfiguration
--   Type-specific feature enabling/disabling
--   Configuration backup/restore via serial
-
-## Lessons Learned
-
-1. **Pull-down is essential** - Prevents floating pin false readings
-2. **Offset mapping is critical** - Separates error state from TYPE_00
-3. **State preservation matters** - Never auto-save invalid readings
-4. **Delayed first read helps** - Allows pins to stabilize after mode change
-5. **Multi-level validation** - Check value, range, and state
-6. **Clear feedback is key** - LED + audio + serial for all conditions
-7. **Boot report is invaluable** - Immediate visibility of configuration
-
-## Summary
-
-The device type configuration system is now **production-ready** with:
-
-✅ Persistent NVS storage  
-✅ Robust edge case handling  
-✅ Clear error feedback  
-✅ TYPE_00 as valid configuration  
-✅ User-friendly calibration mode  
-✅ Comprehensive boot reporting  
-✅ Application layer extensibility
-
-The system correctly handles all error scenarios while providing a clean, simple user experience for device configuration! 🎉
+```cpp
+const char* getAppTypeName(u8 type) {
+    switch(type) {
+        case 0:  return "DOOR_LOCK_MAIN";
+        case 1:  return "DOOR_LOCK_BACKUP";
+        case 5:  return "WINDOW_SENSOR_NORTH";
+        case 10: return "MOTION_DETECTOR_HALL";
+        // ... etc
+    }
+}
+```
 
 ---
 
-**Version**: 1.0.0  
-**Date**: December 1, 2025  
-**Status**: Production Ready ✅
+## Troubleshooting
+
+### Problem: Can't reach TYPE_00, TYPE_01, TYPE_02
+
+**Cause:** Disconnect threshold too high  
+**Solution:** Already fixed - threshold is 30 (well below TYPE_00 range 0-63)
+
+### Problem: Shows TYPE_04 when pot disconnected
+
+**Cause:** Floating pin reads mid-range (~512)  
+**Solution:** Already fixed - two-phase detection with pull-down check
+
+### Problem: Can't reach TYPE_31 (stops at TYPE_30)
+
+**Cause:** Pull-down resistor limits max voltage  
+**Solution:** Already fixed - disable pull-down for accurate reading
+
+### Problem: Device type keeps changing
+
+**Cause:** Noisy connection or bad solder joint  
+**Fix:** Check wiring, resolder connections, use shielded cable
+
+### Problem: Boot report shows "INVALID" type
+
+**Causes:**
+
+1. Potentiometer not connected
+2. Wiper not making contact
+3. Extreme noise on ADC line
+
+**Fix:** Enter calibration mode, adjust pot, verify stable readings
+
+---
+
+## Architecture Notes
+
+### Core vs App Separation
+
+**Core Firmware** (current implementation):
+
+-   Hardware abstraction
+-   Device type management
+-   Generic I/O, communication, etc.
+-   Uses placeholder type names
+
+**App Layer** (reserved for future):
+
+-   Application-specific logic
+-   Custom type definitions
+-   Puzzle behavior
+-   Game state management
+
+This architecture allows:
+
+-   ✅ Core firmware remains stable
+-   ✅ App logic can change independently
+-   ✅ Same hardware, multiple applications
+-   ✅ Easy to add new device types
+
+---
+
+## Related Documentation
+
+-   **[64_TYPE_EXPANSION.md](64_TYPE_EXPANSION.md)** - Future expansion to 64 types
+-   **[NVS_DEVICE_TYPE_STORAGE.md](NVS_DEVICE_TYPE_STORAGE.md)** - NVS implementation details
+-   **[EDGE_CASE_HANDLING.md](EDGE_CASE_HANDLING.md)** - Error scenarios and solutions
+-   **[BOOT_REPORT.md](BOOT_REPORT.md)** - Boot report feature details
+-   **[STATUS_LED.md](STATUS_LED.md)** - Status LED modes
+-   **[HARDWARE_DESIGN.md](HARDWARE_DESIGN.md)** - Hardware requirements
+
+---
+
+## Quick Reference
+
+| Action             | Method                         |
+| ------------------ | ------------------------------ |
+| Enter calibration  | Long-press boot button         |
+| Exit calibration   | Long-press boot button again   |
+| Check current type | `core.getDeviceType()`         |
+| Get type name      | `core.getDeviceTypeName()`     |
+| Factory reset      | `core.clearStoredDeviceType()` |
+| Read from pot      | `core.readDeviceType()`        |
+
+| ADC Value | Type       | Status       |
+| --------- | ---------- | ------------ |
+| 0-29      | INVALID    | Disconnected |
+| 30-63     | TYPE_00    | ✅ Active    |
+| 1984-2047 | TYPE_31    | ✅ Active    |
+| 2048+     | TYPE_32-63 | 🔒 Reserved  |
+
+---
+
+**Last Updated:** December 1, 2025  
+**Version:** 1.0 (64-type ready, 32 active)  
+**Status:** ✅ Production ready

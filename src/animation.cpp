@@ -1,3 +1,10 @@
+/************************* animation.cpp ***********************
+ * LED Animation System Implementation
+ * Provides buffer-based animations for WS2812B LED strips
+ * Created by MSK, November 2025
+ * Supports chase, rainbow, breathing, and sparkle effects
+ ***************************************************************/
+
 #include "animation.h"
 #include "colors.h"
 

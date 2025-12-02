@@ -1,7 +1,9 @@
-/*
-    re-escape room project
-    roomserial.cpp - RS-485 framing helpers for Room Bus
-*/
+/************************* roomserial.cpp **********************
+ * Room Bus RS-485 Communication Implementation
+ * RS-485 framing and protocol handling for Room Bus
+ * Created by MSK, November 2025
+ * Implements CRC16-CCITT with state machine parser
+ ***************************************************************/
 
 #include "roomserial.h"
 #include <string.h> // memcpy
