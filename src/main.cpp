@@ -1,4 +1,5 @@
-#define SEEED_XIAO_ESP32C3
+// Board selection is now configured in platformio.ini via build_flags
+// #define SEEED_XIAO_ESP32C3
 // #define S2_MINI
 
 #include "msk.h"
@@ -17,7 +18,7 @@
 #include "esptimer.h"
 #include "animation.h"
 #include "inputmanager.h"
-#include "app.h"
+#include "core.h"
 
 //============================================================================
 // SYSTEM CONFIGURATION
@@ -50,12 +51,12 @@ IOExpander ioExpander(IO_EXPANDER_I2C_ADDR, &Wire);
 hw_timer_t *timer = nullptr;
 
 //============================================================================
-// APPLICATION MODULES
+// CORE FIRMWARE MODULES
 //============================================================================
 
 Animation animation(&pixels);
 InputManager inputManager(&ioExpander);
-Application app(&pixels, &synth, &animation, &inputManager, &roomBus);
+Core core(&pixels, &synth, &animation, &inputManager, &roomBus);
 
 //============================================================================
 // ISR AND SYSTEM FUNCTIONS
@@ -90,10 +91,12 @@ void setup()
   Serial.println("I2C initialized");
 
   // Initialize I/O Expander
+  bool i2cOk = false;
   if (ioExpander.begin())
   {
     Serial.println("I/O Expander initialized");
     ioExpander.stopAllMotors();
+    i2cOk = true;
   }
   else
   {
@@ -104,9 +107,9 @@ void setup()
   pixels.begin();
   Serial.println("Pixel strip initialized");
 
-  // Initialize button handling
-  initButtons(BTN_1_PIN, BTN_2_PIN);
-  Serial.println("Buttons initialized");
+  // Initialize button handling (single button now)
+  initButtons(BTN_1_PIN);
+  Serial.println("Button initialized");
 
   // Configure hardware timer for button updates and animation timing
   timer = ESPTimer::begin(0, ISR_INTERVAL_MS, &refreshTimer);
@@ -124,12 +127,27 @@ void setup()
   roomBus.begin();
   Serial.println("Room Bus initialized");
 
-  // Initialize application modules
+  // Initialize core firmware modules
   animation.init();    // Animation system
   inputManager.init(); // Input management for keypad and switches
-  app.init();          // Application logic
+  core.init();         // Core firmware logic
+
+  // Set status LED based on I2C health
+  if (!i2cOk)
+  {
+    core.setStatusLed(STATUS_I2C_ERROR);
+    Serial.println("Status LED: I2C ERROR mode (fast blink)");
+  }
+  else
+  {
+    core.setStatusLed(STATUS_OK);
+    Serial.println("Status LED: OK mode (solid ON)");
+  }
 
   Serial.println("=== System Ready ===\n");
+
+  // Print comprehensive boot report
+  core.printBootReport();
 }
 
 //============================================================================
@@ -143,8 +161,8 @@ void loop()
   // Update pixel animations when flagged by ISR
   animation.refresh(pixelUpdateFlag);
 
-  // Update application (handles inputs and Room Bus)
-  app.update();
+  // Update core firmware (handles inputs and Room Bus)
+  core.update();
 
   // Small delay to prevent hot loop
   delay(10);

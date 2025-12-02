@@ -9,8 +9,7 @@ InputManager::InputManager(IOExpander *ioExpander)
       m_callback(nullptr),
       m_lastSwitch1(false),
       m_lastSwitch2(false),
-      m_btn1WasLongPress(false),
-      m_btn2WasLongPress(false)
+      m_btn1WasLongPress(false)
 {
 }
 
@@ -27,7 +26,6 @@ void InputManager::init()
         }
 
         m_btn1WasLongPress = false;
-        m_btn2WasLongPress = false;
 }
 
 void InputManager::poll()
@@ -71,13 +69,6 @@ void InputManager::checkButtons()
                         m_callback(INPUT_BTN1_LONG_PRESS);
         }
 
-        if (keyLongPressed(BTN2))
-        {
-                m_btn2WasLongPress = true;
-                if (m_callback)
-                        m_callback(INPUT_BTN2_LONG_PRESS);
-        }
-
         // Check for short presses on button RELEASE (not press)
         // Only trigger if it wasn't a long press
         if (keyReleased(BTN1))
@@ -87,15 +78,6 @@ void InputManager::checkButtons()
                         m_callback(INPUT_BTN1_PRESS);
                 }
                 m_btn1WasLongPress = false; // Reset for next press
-        }
-
-        if (keyReleased(BTN2))
-        {
-                if (!m_btn2WasLongPress && m_callback)
-                {
-                        m_callback(INPUT_BTN2_PRESS);
-                }
-                m_btn2WasLongPress = false; // Reset for next press
         }
 }
 

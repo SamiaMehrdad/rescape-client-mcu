@@ -10,8 +10,6 @@ enum InputEvent
         INPUT_NONE,
         INPUT_BTN1_PRESS,
         INPUT_BTN1_LONG_PRESS,
-        INPUT_BTN2_PRESS,
-        INPUT_BTN2_LONG_PRESS,
         INPUT_KEYPAD_0,
         INPUT_KEYPAD_1,
         INPUT_KEYPAD_2,
@@ -59,7 +57,6 @@ private:
         bool m_lastSwitch1;
         bool m_lastSwitch2;
         bool m_btn1WasLongPress;
-        bool m_btn2WasLongPress;
 
         void checkButtons();
         void checkKeypad();

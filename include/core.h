@@ -8,9 +8,10 @@
 #include "roomserial.h"
 #include "colors.h"
 #include "mcupins.h"
+#include <Preferences.h>
 
-// Application modes
-enum AppMode
+// Core firmware modes
+enum CoreMode
 {
         MODE_INTERACTIVE,   // User button/keypad control
         MODE_ANIMATION,     // Automated animation
@@ -26,25 +27,34 @@ enum StatusLedMode
         STATUS_TYPE_ERROR // Slow blink (1 Hz) - Invalid device type
 };
 
-class Application
+class Core
 {
 public:
         // Constructor
-        Application(PixelStrip *pixels, Synth *synth, Animation *animation,
-                    InputManager *inputManager, RoomSerial *roomBus);
+        Core(PixelStrip *pixels, Synth *synth, Animation *animation,
+             InputManager *inputManager, RoomSerial *roomBus);
 
-        // Initialize application
+        // Initialize core firmware
         void init();
 
-        // Main application update loop
+        // Main core update loop
         void update();
 
-        // Set application mode
-        void setMode(AppMode mode);
-        AppMode getMode() const { return m_mode; }
+        // Set core mode
+        void setMode(CoreMode mode);
+        CoreMode getMode() const { return m_mode; }
 
         // Get device type (0-31 from trimmer pot ADC)
         u8 getDeviceType() const { return m_deviceType; }
+
+        // Get device type name string
+        // Note: These are placeholder names at firmware level.
+        // High-level App code can override these by implementing its own
+        // type name lookup based on getDeviceType() for application-specific naming.
+        const char *getDeviceTypeName() const;
+
+        // Print boot report showing device configuration
+        void printBootReport();
 
         // Status LED control
         void setStatusLed(StatusLedMode mode);
@@ -58,10 +68,13 @@ private:
         InputManager *m_inputManager;
         RoomSerial *m_roomBus;
 
-        // Application state
-        AppMode m_mode;
+        // Core state
+        CoreMode m_mode;
         int m_colorIndex;
-        u8 m_deviceType; // Device type (0-31) read from trimmer pot at startup
+        u8 m_deviceType; // Device type (0-31) stored in NVS, calibrated via ADC
+
+        // Non-volatile storage for device type
+        Preferences m_preferences;
 
         // Status LED state
         StatusLedMode m_statusLedMode;
@@ -69,16 +82,22 @@ private:
         bool m_ledState;
 
         // Type detection mode state
-        AppMode m_previousMode;    // Mode to return to after type detection
-        u32 m_lastTypeRead;        // Last time device type was read and logged
-        bool m_typeDetectionBlink; // Blink state for type detection LED
-        u8 m_lastDetectedType;     // Last detected type (to track changes)
+        CoreMode m_previousMode;    // Mode to return to after type detection
+        u32 m_lastTypeRead;         // Last time device type was read and logged
+        bool m_typeDetectionBlink;  // Blink state for type detection LED
+        u8 m_lastDetectedType;      // Last detected type (to track changes)
+        u8 m_typeBeforeCalibration; // Device type before entering calibration (for restore)
 
-        // Color palette - defined in app.cpp
+        // Color palette - defined in core.cpp
         static const u32 kColors[];
         static const size_t kColorCount;
 
-        // MIDI note mapping for keypad - defined in app.cpp
+        // Device type names (0-63) - defined in core.cpp
+        // Placeholder names for firmware level. High-level App can override.
+        // Currently using 0-31, expandable to 64 types in future
+        static const char *kDeviceTypeNames[64];
+
+        // MIDI note mapping for keypad - defined in core.cpp
         static const int kNoteMap[16];
 
         // Event handlers
@@ -91,6 +110,9 @@ private:
 
         // Configuration
         u8 readDeviceType(bool verbose = true);
+        void saveDeviceType(u8 type);
+        u8 loadDeviceType();
+        void clearStoredDeviceType(); // Factory reset
 
         // Type detection mode
         void enterTypeDetectionMode();
@@ -98,5 +120,5 @@ private:
         void updateTypeDetectionMode();
 
         // Singleton instance for static callback
-        static Application *s_instance;
+        static Core *s_instance;
 };

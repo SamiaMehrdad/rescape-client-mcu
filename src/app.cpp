@@ -32,7 +32,15 @@ Application::Application(PixelStrip *pixels, Synth *synth, Animation *animation,
       m_inputManager(inputManager),
       m_roomBus(roomBus),
       m_mode(MODE_INTERACTIVE),
-      m_colorIndex(0)
+      m_colorIndex(0),
+      m_deviceType(0),
+      m_statusLedMode(STATUS_OK),
+      m_lastLedToggle(0),
+      m_ledState(false),
+      m_previousMode(MODE_INTERACTIVE),
+      m_lastTypeRead(0),
+      m_typeDetectionBlink(false),
+      m_lastDetectedType(0xFF) // Invalid initial value to force first log
 {
         s_instance = this;
 }
@@ -46,6 +54,18 @@ void Application::init()
         m_mode = MODE_INTERACTIVE;
         m_colorIndex = 0;
 
+        // Initialize status LED pin
+        pinMode(STATUS_LED_PIN, OUTPUT);
+        digitalWrite(STATUS_LED_PIN, LOW);
+        m_statusLedMode = STATUS_OK;
+        m_lastLedToggle = 0;
+        m_ledState = false;
+
+        // Read device type from trimmer pot (one-time read at startup)
+        m_deviceType = readDeviceType();
+        Serial.print("Device Type: ");
+        Serial.println(m_deviceType);
+
         // Set up input callback
         m_inputManager->setCallback(onInputEvent);
 
@@ -57,12 +77,62 @@ void Application::update()
         // Poll inputs
         m_inputManager->poll();
 
+        // Update type detection mode if active
+        if (m_mode == MODE_TYPE_DETECTION)
+        {
+                updateTypeDetectionMode();
+        }
+
+        // Update status LED
+        updateStatusLed();
+
         // Check for Room Bus commands
         RoomFrame rxFrame;
         if (m_roomBus->receiveFrame(&rxFrame))
         {
                 handleRoomBusFrame(rxFrame);
         }
+}
+
+//============================================================================
+// CONFIGURATION
+//============================================================================
+
+u8 Application::readDeviceType(bool verbose)
+{
+        // Configure ADC pin
+        pinMode(CONFIG_ADC_PIN, INPUT);
+
+        // Take multiple readings and average for stability
+        const int numSamples = 32; // More samples for 5-bit precision
+        int sum = 0;
+
+        for (int i = 0; i < numSamples; i++)
+        {
+                sum += analogRead(CONFIG_ADC_PIN);
+                delayMicroseconds(100);
+        }
+
+        int adcValue = sum / numSamples;
+
+        // Convert ADC value (0-4095) to device type (0-31 for 5-bit)
+        // Each step is ~128 ADC units (4096 / 32)
+        u8 deviceType = adcValue / 128;
+
+        // Clamp to 0-31 range
+        if (deviceType > 31)
+                deviceType = 31;
+
+        // Only log if verbose mode is enabled
+        if (verbose)
+        {
+                Serial.print("Config ADC: ");
+                Serial.print(adcValue);
+                Serial.print(" -> Type ");
+                Serial.println(deviceType);
+        }
+
+        return deviceType;
 }
 
 //============================================================================
@@ -116,12 +186,7 @@ void Application::handleInputEvent(InputEvent event)
                 handleButton1Press();
                 break;
 
-        case INPUT_BTN2_PRESS:
-                handleButton2Press();
-                break;
-
         case INPUT_BTN1_LONG_PRESS:
-        case INPUT_BTN2_LONG_PRESS:
                 handleButtonLongPress();
                 break;
 
@@ -171,28 +236,7 @@ void Application::handleInputEvent(InputEvent event)
 
 void Application::handleButton1Press()
 {
-        Serial.println("Color change: backward");
-
-        // Stop animation when changing colors manually
-        if (m_animation->isActive())
-        {
-                m_animation->stop();
-        }
-
-        // Cycle color backward
-        m_colorIndex = (m_colorIndex - 1 + kColorCount) % kColorCount;
-        m_pixels->setAll(kColors[m_colorIndex]);
-        m_pixels->show(); // Actually update the LEDs!
-
-        // Play sound feedback
-        m_synth->setWaveform(WAVE_TRIANGLE);
-        m_synth->setADSR(10, 20, 250, 250);
-        m_synth->playNote(NOTE_A4, 300, 250);
-}
-
-void Application::handleButton2Press()
-{
-        Serial.println("Color change: forward (rainbow)");
+        Serial.println("Color change: cycle colors");
 
         // Stop animation when changing colors manually
         if (m_animation->isActive())
@@ -219,17 +263,14 @@ void Application::handleButton2Press()
 
 void Application::handleButtonLongPress()
 {
-        // Toggle animation
-        if (m_animation->isActive())
+        // Toggle type detection mode
+        if (m_mode == MODE_TYPE_DETECTION)
         {
-                m_animation->stop();
-                Serial.println("Animation stopped");
-                m_pixels->clear();
+                exitTypeDetectionMode();
         }
         else
         {
-                m_animation->start(ANIM_RED_DOT_CHASE);
-                Serial.println("Animation started");
+                enterTypeDetectionMode();
         }
 }
 
@@ -266,5 +307,166 @@ void Application::handleRoomBusFrame(const RoomFrame &frame)
                 m_pixels->show();
 
                 Serial.println("Color set via Room Bus command");
+        }
+}
+
+//============================================================================
+// STATUS LED CONTROL
+//============================================================================
+
+void Application::setStatusLed(StatusLedMode mode)
+{
+        m_statusLedMode = mode;
+        m_lastLedToggle = millis();
+
+        // Set initial state based on mode
+        if (mode == STATUS_OK)
+        {
+                m_ledState = true;
+                digitalWrite(STATUS_LED_PIN, HIGH); // Solid ON for OK
+        }
+        else
+        {
+                m_ledState = false;
+                digitalWrite(STATUS_LED_PIN, LOW); // Start with OFF for blink modes
+        }
+}
+
+void Application::updateStatusLed()
+{
+        // Don't update status LED in type detection mode
+        if (m_mode == MODE_TYPE_DETECTION)
+        {
+                return;
+        }
+
+        u32 now = millis();
+        u32 interval = 0;
+
+        switch (m_statusLedMode)
+        {
+        case STATUS_OK:
+                // Solid ON - no blinking needed
+                if (!m_ledState)
+                {
+                        m_ledState = true;
+                        digitalWrite(STATUS_LED_PIN, HIGH);
+                }
+                return;
+
+        case STATUS_I2C_ERROR:
+                // Fast blink - 5 Hz (200ms period, 100ms ON/OFF)
+                interval = 100;
+                break;
+
+        case STATUS_TYPE_ERROR:
+                // Slow blink - 1 Hz (1000ms period, 500ms ON/OFF)
+                interval = 500;
+                break;
+        }
+
+        // Toggle LED at specified interval
+        if (now - m_lastLedToggle >= interval)
+        {
+                m_lastLedToggle = now;
+                m_ledState = !m_ledState;
+                digitalWrite(STATUS_LED_PIN, m_ledState ? HIGH : LOW);
+        }
+}
+
+//============================================================================
+// TYPE DETECTION MODE
+//============================================================================
+
+void Application::enterTypeDetectionMode()
+{
+        Serial.println("\n=== ENTERING TYPE DETECTION MODE ===");
+        Serial.println("Adjust trimmer pot to select device type (0-31)");
+        Serial.println("Type changes will be logged automatically.");
+        Serial.println("LED flashes once per reading (every 1 second).");
+        Serial.println("Long press button again to exit.\n");
+
+        // Save current mode to restore later
+        m_previousMode = m_mode;
+        m_mode = MODE_TYPE_DETECTION;
+
+        // Stop any running animation
+        if (m_animation->isActive())
+        {
+                m_animation->stop();
+        }
+
+        // Clear pixels
+        m_pixels->clear();
+        m_pixels->show();
+
+        // Initialize type detection state
+        m_lastTypeRead = 0;
+        m_typeDetectionBlink = false;
+        m_lastDetectedType = 0xFF; // Force first reading to be logged
+
+        // Turn off status LED (will be used for reading flash only)
+        digitalWrite(STATUS_LED_PIN, LOW);
+}
+
+void Application::exitTypeDetectionMode()
+{
+        Serial.println("\n=== EXITING TYPE DETECTION MODE ===");
+        Serial.print("Final Device Type: ");
+        Serial.println(m_deviceType);
+        Serial.println();
+
+        // Restore previous mode
+        m_mode = m_previousMode;
+
+        // Restore status LED to previous state
+        if (m_statusLedMode == STATUS_OK)
+        {
+                digitalWrite(STATUS_LED_PIN, HIGH);
+        }
+
+        // Play exit sound
+        m_synth->setWaveform(WAVE_SINE);
+        m_synth->setADSR(5, 50, 80, 100);
+        m_synth->playNote(NOTE_C5, 100, 150);
+}
+
+void Application::updateTypeDetectionMode()
+{
+        u32 now = millis();
+
+        // Read device type every 1000ms (1 second)
+        if (now - m_lastTypeRead >= 1000)
+        {
+                m_lastTypeRead = now;
+
+                // Re-read device type from ADC (non-verbose - no auto-logging)
+                m_deviceType = readDeviceType(false);
+
+                // Only log if type has changed
+                if (m_deviceType != m_lastDetectedType)
+                {
+                        Serial.print("Type changed: ");
+                        Serial.print(m_lastDetectedType);
+                        Serial.print(" -> ");
+                        Serial.println(m_deviceType);
+                        m_lastDetectedType = m_deviceType;
+                }
+
+                // Flash LED once (100ms pulse)
+                digitalWrite(STATUS_LED_PIN, HIGH);
+                m_typeDetectionBlink = true;
+
+                // Play a short beep
+                m_synth->setWaveform(WAVE_SQUARE);
+                m_synth->setADSR(1, 10, 20, 20);
+                m_synth->playNote(NOTE_A4, 50, 100);
+        }
+
+        // Turn off LED after 100ms flash
+        if (m_typeDetectionBlink && (now - m_lastTypeRead >= 100))
+        {
+                digitalWrite(STATUS_LED_PIN, LOW);
+                m_typeDetectionBlink = false;
         }
 }

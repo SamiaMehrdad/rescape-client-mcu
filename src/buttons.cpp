@@ -2,7 +2,6 @@
 
 // Button state shared across modules
 ButtonState buttons[NUM_BUTTONS] = {
-    {false, false, false, false, false, false, 0, 0},
     {false, false, false, false, false, false, 0, 0}};
 
 // Pin assignments stored during initialization
@@ -58,10 +57,9 @@ static void updateButton(u8 index, u8 pin, u32 now)
 // Public API ----------------------------------------------------------------
 
 // Initialize button pins
-void initButtons(u8 btn1Pin, u8 btn2Pin)
+void initButtons(u8 btn1Pin)
 {
         buttonPins[BTN1] = btn1Pin;
-        buttonPins[BTN2] = btn2Pin;
 
         u32 now = millis();
 
@@ -86,7 +84,6 @@ void updateButtons()
 {
         u32 now = millis();
         updateButton(BTN1, buttonPins[BTN1], now);
-        updateButton(BTN2, buttonPins[BTN2], now);
 }
 
 // Query whether a button is currently held down (active-low)

@@ -47,8 +47,11 @@
 // ============================================================================
 
 // Input pins
-constexpr u8 BTN_1_PIN = 9;  // D9 - Boot button
-constexpr u8 BTN_2_PIN = 10; // D10
+constexpr u8 BTN_1_PIN = 9; // D9 - Boot button (only button)
+
+// Status LED pin
+constexpr u8 STATUS_LED_PIN = 3; // D1/A1 - Status indicator LED (GPIO 3)
+// Status modes: ON=OK, Fast blink (5Hz)=I2C-ERR, Slow blink (1Hz)=TYPE-ERR
 
 // I2C pins (default)
 constexpr u8 I2C_SDA_PIN = 6; // D4 - I2C SDA
@@ -63,9 +66,14 @@ constexpr u8 SPKR_PIN = 5; // D3 - PWM audio output (GPIO 5)
 
 constexpr u8 PIXEL_PIN = 4; // D2 - WS2812B data line (GPIO 4)
 
+// Configuration ADC pin for device type selection (5-bit = 32 types)
+// Hardware: 10kΩ-25kΩ multi-turn trimmer pot between 3.3V and GND
+// Wiper connected to CONFIG_ADC_PIN for voltage adjustment (0V-3.3V)
+constexpr u8 CONFIG_ADC_PIN = 2; // D0/A0 - Device type configuration (GPIO 2, ADC1_CH2)
+
 // I/O Expander Configuration (PCF8575-based)
 constexpr u8 IO_EXPANDER_I2C_ADDR = 0x20; // I/O Expander base address (A0=A1=A2=0)
-constexpr u8 IO_EXPANDER_INT_PIN = 2;     // D0 - I/O Expander interrupt pin (optional, active LOW)
+constexpr u8 IO_EXPANDER_INT_PIN = 10;    // D10 - I/O Expander interrupt pin (optional, active LOW)
 
 #elif defined(S2_MINI)
 
@@ -102,8 +110,11 @@ constexpr u8 IO_EXPANDER_INT_PIN = 2;     // D0 - I/O Expander interrupt pin (op
 // ============================================================================
 
 // Input pins
-constexpr u8 BTN_1_PIN = 14; // GPIO 14
-constexpr u8 BTN_2_PIN = 12; // GPIO 12
+constexpr u8 BTN_1_PIN = 14; // GPIO 14 (only button)
+
+// Status LED pin
+constexpr u8 STATUS_LED_PIN = 3; // GPIO 3 - Status indicator LED
+// Status modes: ON=OK, Fast blink (5Hz)=I2C-ERR, Slow blink (1Hz)=TYPE-ERR
 
 // I2C pins (default)
 constexpr u8 I2C_SDA_PIN = 6; // GPIO 6 - I2C SDA
@@ -118,9 +129,14 @@ constexpr u8 SPKR_PIN = 5; // GPIO 5 - PWM audio output
 
 constexpr u8 PIXEL_PIN = 4; // GPIO 4 - WS2812B data line
 
+// Configuration ADC pin for device type selection (5-bit = 32 types)
+// Hardware: 10kΩ-25kΩ multi-turn trimmer pot between 3.3V and GND
+// Wiper connected to CONFIG_ADC_PIN for voltage adjustment (0V-3.3V)
+constexpr u8 CONFIG_ADC_PIN = 1; // GPIO 1 - Device type configuration (ADC1_CH0)
+
 // I/O Expander Configuration (PCF8575-based)
 constexpr u8 IO_EXPANDER_I2C_ADDR = 0x20; // I/O Expander base address (A0=A1=A2=0)
-constexpr u8 IO_EXPANDER_INT_PIN = 2;     // GPIO 2 - I/O Expander interrupt pin (optional, active LOW)
+constexpr u8 IO_EXPANDER_INT_PIN = 12;    // GPIO 12 - I/O Expander interrupt pin (optional, active LOW)
 
 #else
 #error No board defined! Define SEEED_XIAO_ESP32C3 or S2_MINI.

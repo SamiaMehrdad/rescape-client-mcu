@@ -13,8 +13,7 @@
 
 // Button definitions
 #define BTN1 0
-#define BTN2 1
-#define NUM_BUTTONS 2
+#define NUM_BUTTONS 1
 #define DEBOUNCE_MS 50
 #define LONG_PRESS_MS 1000 // Time for long press detection
 
@@ -35,7 +34,7 @@ struct ButtonState
 extern ButtonState buttons[NUM_BUTTONS];
 
 // Function prototypes
-void initButtons(u8 btn1Pin, u8 btn2Pin);
+void initButtons(u8 btn1Pin);
 void updateButtons();
 bool keyDown(u8 btn);
 bool keyPressed(u8 btn);
