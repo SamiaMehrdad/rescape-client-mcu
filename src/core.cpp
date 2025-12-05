@@ -7,6 +7,21 @@
 
 #include "core.h"
 #include <Arduino.h>
+#include "mcupins.h"
+#include "buttons.h"
+#include "watchdog.h"
+#include "esptimer.h"
+#include "ioexpander.h"
+#include <Wire.h>
+#include "esp_log.h"
+
+// Timer ISR interval configuration (defined in main.cpp)
+extern const u8 ISR_INTERVAL_MS;
+extern const u8 ANIM_REFRESH_MS;
+extern volatile bool pixelUpdateFlag;
+
+// Timer ISR: refresh button logic and trigger pixel updates (defined in main.cpp)
+extern void IRAM_ATTR refreshTimer();
 
 //============================================================================
 // CONFIGURATION CONSTANTS
@@ -66,10 +81,10 @@ const int Core::kNoteMap[16] = {
 // Types 32-63 reserved for future expansion
 const char *Core::kDeviceTypeNames[64] = {
     // Currently used types (0-31)
-    "TYPE_00", "TYPE_01", "TYPE_02", "TYPE_03",
-    "TYPE_04", "TYPE_05", "TYPE_06", "TYPE_07",
-    "TYPE_08", "TYPE_09", "TYPE_10", "TYPE_11",
-    "TYPE_12", "TYPE_13", "TYPE_14", "TYPE_15",
+    "Terminal", "GlowButton", "NumBox", "Timer",
+    "GlowDots", "QB", "RGBMixer", "Bomb",
+    "FinalOrder", "BallGate", "Actuator", "TheWall",
+    "Scores", "TYPE_13", "TYPE_14", "TYPE_15",
     "TYPE_16", "TYPE_17", "TYPE_18", "TYPE_19",
     "TYPE_20", "TYPE_21", "TYPE_22", "TYPE_23",
     "TYPE_24", "TYPE_25", "TYPE_26", "TYPE_27",
@@ -85,6 +100,11 @@ const char *Core::kDeviceTypeNames[64] = {
     "TYPE_56", "TYPE_57", "TYPE_58", "TYPE_59",
     "TYPE_60", "TYPE_61", "TYPE_62", "TYPE_63"};
 
+// LED patterns for status indication
+const LedPattern Core::LED_PATTERN_OK = {100, 3000};        // Long ON, short OFF (mostly off)
+const LedPattern Core::LED_PATTERN_I2C_ERROR = {100, 100};  // Fast blink (5 Hz)
+const LedPattern Core::LED_PATTERN_TYPE_ERROR = {500, 500}; // Slow blink (1 Hz)
+
 //============================================================================
 // CONSTRUCTOR
 //============================================================================
@@ -99,6 +119,7 @@ Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
       m_mode(MODE_INTERACTIVE),
       m_colorIndex(0),
       m_deviceType(0),
+      m_pixelCheckDone(false),
       m_statusLedMode(STATUS_OK),
       m_lastLedToggle(0),
       m_ledState(false),
@@ -114,6 +135,66 @@ Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
 //============================================================================
 // PUBLIC METHODS
 //============================================================================
+
+// System-wide initialization - sets up all hardware and firmware modules
+void Core::systemInit(PixelStrip *pixels, Synth *synth, Animation *animation,
+                      InputManager *inputManager, RoomSerial *roomBus,
+                      Core *core, IOExpander *ioExpander, hw_timer_t **timer)
+{
+        delay(500);
+        Serial.begin(115200);
+        delay(1000);
+
+        // Disable I2C error logging to reduce Serial spam
+        esp_log_level_set("i2c", ESP_LOG_NONE);
+
+        // Initialize I2C for I/O Expander
+        Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+
+        // Initialize I/O Expander
+        bool i2cOk = false;
+        if (ioExpander->begin())
+        {
+                ioExpander->stopAllMotors();
+                i2cOk = true;
+        }
+
+        // Initialize pixel strip
+        pixels->begin();
+
+        // Initialize button handling (single button now)
+        initButtons(BTN_1_PIN);
+
+        // Configure hardware timer for button updates and animation timing
+        *timer = ESPTimer::begin(0, ISR_INTERVAL_MS, &refreshTimer);
+
+        // Initialize watchdog (1 second timeout)
+        Watchdog::begin(1, true);
+
+        // Initialize synthesizer
+        synth->init(SOUND_DEFAULT);
+
+        // Initialize RS-485 communication for Room Bus
+        roomBus->begin();
+
+        // Initialize core firmware modules
+        animation->init();    // Animation system
+        inputManager->init(); // Input management for keypad and switches
+        core->init();         // Core firmware logic
+
+        // Set status LED based on I2C health
+        if (!i2cOk)
+        {
+                core->setStatusLed(STATUS_I2C_ERROR);
+        }
+        else
+        {
+                core->setStatusLed(STATUS_OK);
+        }
+
+        // Print comprehensive boot report
+        core->printBootReport();
+}
 
 void Core::init()
 {
@@ -177,6 +258,11 @@ void Core::update()
         {
                 handleRoomBusFrame(rxFrame);
         }
+}
+
+void Core::refreshAnimations(volatile bool &flag)
+{
+        m_animation->refresh(flag);
 }
 
 //============================================================================
@@ -285,7 +371,7 @@ u8 Core::readDeviceType(bool verbose)
 void Core::printBootReport()
 {
         Serial.println("\n╔════════════════════════════════════════════════════════════╗");
-        Serial.println("║           ESCAPE ROOM CLIENT - BOOT REPORT                ║");
+        Serial.println("║            ESCAPE ROOM CLIENT - BOOT REPORT                ║");
         Serial.println("╚════════════════════════════════════════════════════════════╝");
         Serial.println();
 
@@ -337,13 +423,13 @@ void Core::printBootReport()
         switch (m_statusLedMode)
         {
         case STATUS_OK:
-                Serial.println("OK (solid ON)");
+                Serial.println("OK");
                 break;
         case STATUS_I2C_ERROR:
-                Serial.println("I2C ERROR (fast blink)");
+                Serial.println("I2C ERROR");
                 break;
         case STATUS_TYPE_ERROR:
-                Serial.println("TYPE ERROR (slow blink)");
+                Serial.println("TYPE MISMATCH");
                 break;
         }
 
@@ -590,7 +676,17 @@ void Core::handleInputEvent(InputEvent event)
 
 void Core::handleButton1Press()
 {
-        Serial.println("Color change: cycle colors");
+        // First button press after boot: run pixel check
+        if (!m_pixelCheckDone)
+        {
+                Serial.println("\n*** First button press - running pixel check... ***");
+                m_pixelCheckDone = true;
+                m_pixels->pixelCheck(200); // 200ms delay between each LED
+                Serial.println("*** Pixel check complete. Next button press will cycle colors. ***\n");
+                return;
+        }
+
+        Serial.println("Button press: cycle colors");
 
         // Stop animation when changing colors manually
         if (m_animation->isActive())
@@ -668,6 +764,21 @@ void Core::handleRoomBusFrame(const RoomFrame &frame)
 // STATUS LED CONTROL
 //============================================================================
 
+const LedPattern &Core::getCurrentLedPattern() const
+{
+        switch (m_statusLedMode)
+        {
+        case STATUS_OK:
+                return LED_PATTERN_OK;
+        case STATUS_I2C_ERROR:
+                return LED_PATTERN_I2C_ERROR;
+        case STATUS_TYPE_ERROR:
+                return LED_PATTERN_TYPE_ERROR;
+        default:
+                return LED_PATTERN_OK;
+        }
+}
+
 void Core::setStatusLed(StatusLedMode mode)
 {
         // Validate mode
@@ -680,18 +791,8 @@ void Core::setStatusLed(StatusLedMode mode)
 
         m_statusLedMode = mode;
         m_lastLedToggle = millis();
-
-        // Set initial state based on mode
-        if (mode == STATUS_OK)
-        {
-                m_ledState = true;
-                digitalWrite(STATUS_LED_PIN, HIGH); // Solid ON for OK
-        }
-        else
-        {
-                m_ledState = false;
-                digitalWrite(STATUS_LED_PIN, LOW); // Start with OFF for blink modes
-        }
+        m_ledState = true; // Start with LED ON
+        digitalWrite(STATUS_LED_PIN, HIGH);
 }
 
 void Core::updateStatusLed()
@@ -703,31 +804,12 @@ void Core::updateStatusLed()
         }
 
         u32 now = millis();
-        u32 interval = 0;
+        const LedPattern &pattern = getCurrentLedPattern();
 
-        switch (m_statusLedMode)
-        {
-        case STATUS_OK:
-                // Solid ON - no blinking needed
-                if (!m_ledState)
-                {
-                        m_ledState = true;
-                        digitalWrite(STATUS_LED_PIN, HIGH);
-                }
-                return;
+        // Determine current interval (ON time or OFF time)
+        u32 interval = m_ledState ? pattern.timeOn : pattern.timeOff;
 
-        case STATUS_I2C_ERROR:
-                // Fast blink - 5 Hz (200ms period, 100ms ON/OFF)
-                interval = 100;
-                break;
-
-        case STATUS_TYPE_ERROR:
-                // Slow blink - 1 Hz (1000ms period, 500ms ON/OFF)
-                interval = 500;
-                break;
-        }
-
-        // Toggle LED at specified interval
+        // Toggle LED when interval expires
         if (now - m_lastLedToggle >= interval)
         {
                 m_lastLedToggle = now;

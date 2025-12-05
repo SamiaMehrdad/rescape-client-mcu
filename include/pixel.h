@@ -100,6 +100,13 @@ public:
          */
         Adafruit_NeoPixel &getPixels() { return pixels; }
 
+        /**
+         * Pixel check routine - turns on each LED to white one by one
+         * Useful for testing that all LEDs are working
+         * @param delayMs Delay between each LED (default 200ms)
+         */
+        void pixelCheck(u16 delayMs = 200);
+
 private:
         Adafruit_NeoPixel pixels;
         u8 physicalCount; // Total physical LEDs

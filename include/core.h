@@ -19,12 +19,19 @@ enum CoreMode
         MODE_TYPE_DETECTION // Type detection/calibration mode
 };
 
+// Status LED pattern structure
+struct LedPattern
+{
+        u32 timeOn;  // LED ON duration in milliseconds
+        u32 timeOff; // LED OFF duration in milliseconds
+};
+
 // Status LED modes
 enum StatusLedMode
 {
-        STATUS_OK,        // Solid ON - everything OK
-        STATUS_I2C_ERROR, // Fast blink (5 Hz) - I2C communication error
-        STATUS_TYPE_ERROR // Slow blink (1 Hz) - Invalid device type
+        STATUS_OK,        // Long ON (3000ms ON, 100ms OFF) - Normal operation
+        STATUS_I2C_ERROR, // Fast blink (100ms ON, 100ms OFF) - I2C communication error
+        STATUS_TYPE_ERROR // Slow blink (500ms ON, 500ms OFF) - Invalid device type
 };
 
 class Core
@@ -34,11 +41,19 @@ public:
         Core(PixelStrip *pixels, Synth *synth, Animation *animation,
              InputManager *inputManager, RoomSerial *roomBus);
 
+        // System-wide initialization (call once from setup())
+        static void systemInit(PixelStrip *pixels, Synth *synth, Animation *animation,
+                               InputManager *inputManager, RoomSerial *roomBus,
+                               Core *core, IOExpander *ioExpander, hw_timer_t **timer);
+
         // Initialize core firmware
         void init();
 
         // Main core update loop
         void update();
+
+        // Refresh animations (call from main loop with ISR flag)
+        void refreshAnimations(volatile bool &flag);
 
         // Set core mode
         void setMode(CoreMode mode);
@@ -71,7 +86,8 @@ private:
         // Core state
         CoreMode m_mode;
         int m_colorIndex;
-        u8 m_deviceType; // Device type (0-31) stored in NVS, calibrated via ADC
+        u8 m_deviceType;       // Device type (0-31) stored in NVS, calibrated via ADC
+        bool m_pixelCheckDone; // Track if pixel check has been performed
 
         // Non-volatile storage for device type
         Preferences m_preferences;
@@ -80,6 +96,14 @@ private:
         StatusLedMode m_statusLedMode;
         u32 m_lastLedToggle;
         bool m_ledState;
+
+        // LED patterns for different modes
+        static const LedPattern LED_PATTERN_OK;
+        static const LedPattern LED_PATTERN_I2C_ERROR;
+        static const LedPattern LED_PATTERN_TYPE_ERROR;
+
+        // Get pattern for current mode
+        const LedPattern &getCurrentLedPattern() const;
 
         // Type detection mode state
         CoreMode m_previousMode;    // Mode to return to after type detection

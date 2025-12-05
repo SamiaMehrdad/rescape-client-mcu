@@ -17,6 +17,169 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 ---
 
+## December 5, 2025 - Architecture Improvements & Pixel Testing
+
+### 🎯 Code Organization and Hardware Testing Enhancements
+
+**Status:** ✅ Complete
+
+**Summary:** Major code organization improvements with initialization refactoring, status LED pattern system, and comprehensive pixel testing functionality.
+
+---
+
+### Architecture Improvements
+
+#### 1. System Initialization Refactoring
+
+**Changed:** Moved all initialization logic from `main.cpp` to `Core::systemInit()`
+
+**Implementation:**
+
+```cpp
+// In core.h
+static void systemInit(PixelStrip *pixels, Synth *synth, Animation *animation,
+                      InputManager *inputManager, RoomSerial *roomBus,
+                      Core *core, IOExpander *ioExpander, hw_timer_t **timer);
+
+// In main.cpp - simplified to one line
+void setup() {
+  Core::systemInit(&pixels, &synth, &animation, &inputManager, &roomBus,
+                  &core, &ioExpander, &timer);
+}
+```
+
+**Benefits:**
+
+-   Cleaner main.cpp focused on high-level structure
+-   All initialization logic centralized in Core
+-   Easier to maintain and test
+-   Better encapsulation of firmware concerns
+
+---
+
+#### 2. Animation Refresh Encapsulation
+
+**Changed:** Animation refresh now accessed through Core interface
+
+**Implementation:**
+
+```cpp
+// In core.h
+void refreshAnimations(volatile bool &flag);
+
+// In main.cpp loop
+core.refreshAnimations(pixelUpdateFlag);
+core.update();
+```
+
+**Benefits:**
+
+-   Main loop only interfaces with `core`
+-   Better encapsulation while maintaining timing separation
+-   Preserves ISR-driven animation refresh at 25 Hz
+-   Cleaner and more consistent API
+
+---
+
+#### 3. Status LED Pattern System
+
+**Changed:** Implemented structured LED pattern system with `{timeOn, timeOff}` values
+
+**Implementation:**
+
+```cpp
+struct LedPattern {
+    u32 timeOn;   // LED ON duration in milliseconds
+    u32 timeOff;  // LED OFF duration in milliseconds
+};
+
+const LedPattern LED_PATTERN_OK = {3000, 100};          // Long ON, short OFF
+const LedPattern LED_PATTERN_I2C_ERROR = {100, 100};    // Fast blink (5 Hz)
+const LedPattern LED_PATTERN_TYPE_ERROR = {500, 500};   // Slow blink (1 Hz)
+```
+
+**Benefits:**
+
+-   Easy to modify LED patterns without changing logic
+-   Self-documenting pattern timings
+-   Flexible runtime pattern selection
+-   Cleaner update logic
+
+---
+
+### Hardware Testing Features
+
+#### 4. Pixel Check Function
+
+**Added:** Comprehensive LED testing function triggered on first button press
+
+**Implementation:**
+
+```cpp
+void PixelStrip::pixelCheck(u16 delayMs = 200);
+```
+
+**Features:**
+
+-   Tests all 8 logical pixels sequentially at full brightness (255, 255, 255)
+-   Watchdog feeding during long delays prevents device reset
+-   Automatic brightness restoration after test
+-   Detailed Serial monitor output
+-   One-time execution on first button press
+
+**Benefits:**
+
+-   Verify all LEDs are working on startup
+-   Identify wiring or hardware issues quickly
+-   Non-intrusive (only runs once)
+-   Restores normal operation after test
+
+---
+
+### Bug Fixes
+
+#### 5. Type System Fixes
+
+**Fixed:** Missing `<cstdint>` include in `msk.h` causing type definition errors
+
+**Implementation:**
+
+```cpp
+#include <cstdint>  // Added for uint32_t, uint8_t, etc.
+```
+
+---
+
+#### 6. Linker Issues with constexpr
+
+**Fixed:** Changed `constexpr` to `extern const` for cross-compilation unit visibility
+
+**Implementation:**
+
+```cpp
+// In main.cpp
+extern const u8 ISR_INTERVAL_MS = 5;
+extern const u8 ANIM_REFRESH_MS = 40;
+```
+
+---
+
+### Code Quality Improvements
+
+**Header File Cleanup:**
+
+-   Fixed malformed header comments
+-   Proper include guards and dependencies
+-   Removed duplicate enum definitions
+
+**Watchdog Integration:**
+
+-   Added watchdog feeding to pixel check loops
+-   Prevents device reset during long operations
+-   Maintains system stability during testing
+
+---
+
 ## December 1, 2025 - Code Quality & Documentation Improvements
 
 ### 🎯 Production-Ready Code Quality Enhancements
