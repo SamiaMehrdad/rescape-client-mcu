@@ -21,20 +21,20 @@ constexpr u8 IO_EXPANDER_BASE_ADDR = 0x20;
 // Keypad matrix configuration (4x4 matrix)
 constexpr u8 KEYPAD_ROWS = 4;
 constexpr u8 KEYPAD_COLS = 4;
-constexpr u8 KEYPAD_ROW_START = 0; // P00-P03 (pins 0-3)
-constexpr u8 KEYPAD_COL_START = 4; // P04-P07 (pins 4-7)
+constexpr u8 KEYPAD_ROW_START = 12; // P14-P17 (pins 12-15)
+constexpr u8 KEYPAD_COL_START = 8;  // P10-P13 (pins 8-11)
 
 // Motor control pins (H-bridge control)
-constexpr u8 MOT1A = 8;  // P10
-constexpr u8 MOT1B = 9;  // P11
-constexpr u8 MOT2A = 10; // P12
-constexpr u8 MOT2B = 11; // P13
+constexpr u8 MOT1A = 0; // P00
+constexpr u8 MOT1B = 1; // P01
+constexpr u8 MOT2A = 2; // P02
+constexpr u8 MOT2B = 3; // P03
 
 // Switch/sensor input pins
-constexpr u8 SW_1 = 12; // P14
-constexpr u8 SW_2 = 13; // P15
-constexpr u8 SW_3 = 14; // P16
-constexpr u8 SW_4 = 15; // P17
+constexpr u8 SW_1 = 4; // P04
+constexpr u8 SW_2 = 5; // P05
+constexpr u8 SW_3 = 6; // P06
+constexpr u8 SW_4 = 7; // P07
 
 // Keypad key definitions (4x4 matrix)
 constexpr char KEYPAD_KEYS[KEYPAD_ROWS][KEYPAD_COLS] = {
@@ -67,17 +67,19 @@ private:
         bool _isPresent;  // Device presence flag
 
         // Keypad scanning state
-        u8 _lastKeyIndex; // Last detected key index (0-15, 255 if none)
-        u8 _lastKeyRow;   // Last detected key row
-        u8 _lastKeyCol;   // Last detected key column
-        char _lastKey;    // Last detected key character (for convenience)
-        bool _keyPressed; // Key press state
+        u8 _lastKeyIndex;    // Last key that triggered an event (0-15, 255 if none)
+        u8 _lastKeyRow;      // Last detected key row
+        u8 _lastKeyCol;      // Last detected key column
+        char _lastKey;       // Last detected key character (for convenience)
+        bool _keyPressed;    // Key press state
+        u8 _pressedKeyIndex; // Index of currently pressed key (255 if none)
 
         // Debouncing state
-        u8 _stableKeyIndex;          // Last stable key (after debounce)
-        u8 _rawKeyIndex;             // Current raw scan result
-        u8 _debounceCount;           // Consecutive matching reads
-        unsigned long _lastScanTime; // Time of last scan (for rate limiting)
+        u8 _stableKeyIndex;              // Last stable key (after debounce)
+        u8 _rawKeyIndex;                 // Current raw scan result
+        u8 _debounceCount;               // Consecutive matching reads
+        unsigned long _lastScanTime;     // Time of last scan (for rate limiting)
+        unsigned long _lastKeyPressTime; // Time of last key press event (for minimum response time)
 
         // I2C communication helpers
         bool writePort(u16 value);

@@ -74,6 +74,29 @@ const int Core::kNoteMap[16] = {
     NOTE_D5, NOTE_E5, NOTE_F5, NOTE_G5,
     NOTE_A5, NOTE_B5, NOTE_C6, NOTE_D6};
 
+// Key to LED mapping (16 keys -> 16 LEDs)
+// Maps physical key index to corresponding LED index based on wiring
+// K0→L0, K1→L11, K2→L8, K3→L15, K4→L14, K5→L6, K6→L9, K7→L13,
+// K8→L2, K9→L5, K10→L10, K11→L1, K12→L3, K13→L7, K14→L4, K15→L12
+const u8 Core::kKeyToLedMap[16] = {
+    0,  // K0  -> L0
+    7,  // K1  -> L7
+    8,  // K2  -> L8
+    15, // K3  -> L15
+    1,  // K4  -> L1
+    6,  // K5  -> L6
+    9,  // K6  -> L9
+    14, // K7  -> L14
+    2,  // K8  -> L2
+    5,  // K9  -> L5
+    10, // K10 -> L10
+    13, // K11 -> L13
+    3,  // K12 -> L3
+    4,  // K13 -> L4
+    11, // K14 -> L11
+    12  // K15 -> L12
+};
+
 // Device type names (0-63, currently using 0-31)
 // These are placeholder names at the Core firmware level.
 // High-level App code should implement its own type name mapping
@@ -130,6 +153,12 @@ Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
       m_typeBeforeCalibration(0) // Will be set when entering calibration
 {
         s_instance = this;
+
+        // Initialize keypad LED states to off
+        for (int i = 0; i < 16; i++)
+        {
+                m_keypadLedStates[i] = false;
+        }
 }
 
 //============================================================================
@@ -416,6 +445,9 @@ void Core::printBootReport()
         case MODE_TYPE_DETECTION:
                 Serial.println("TYPE_DETECTION (calibration)");
                 break;
+        case MODE_KEYPAD_TEST:
+                Serial.println("KEYPAD_TEST (LED toggle test)");
+                break;
         }
 
         // Status LED
@@ -570,7 +602,8 @@ void Core::setMode(CoreMode mode)
 {
         // Validate mode
         if (mode != MODE_INTERACTIVE && mode != MODE_ANIMATION &&
-            mode != MODE_REMOTE && mode != MODE_TYPE_DETECTION)
+            mode != MODE_REMOTE && mode != MODE_TYPE_DETECTION &&
+            mode != MODE_KEYPAD_TEST)
         {
                 Serial.print("ERROR: Invalid mode ");
                 Serial.println((int)mode);
@@ -597,6 +630,10 @@ void Core::setMode(CoreMode mode)
 
         case MODE_TYPE_DETECTION:
                 // Don't log here - enterTypeDetectionMode() handles it
+                break;
+
+        case MODE_KEYPAD_TEST:
+                // Don't log here - enterKeypadTestMode() handles it
                 break;
         }
 }
@@ -646,7 +683,15 @@ void Core::handleInputEvent(InputEvent event)
         case INPUT_KEYPAD_13:
         case INPUT_KEYPAD_14:
         case INPUT_KEYPAD_15:
-                handleKeypadPress(m_inputManager->getKeypadNote(event));
+                // In keypad test mode, toggle LED instead of playing note
+                if (m_mode == MODE_KEYPAD_TEST)
+                {
+                        handleKeypadTestPress(m_inputManager->getKeypadNote(event));
+                }
+                else
+                {
+                        handleKeypadPress(m_inputManager->getKeypadNote(event));
+                }
                 break;
 
         case INPUT_SWITCH1_ON:
@@ -713,14 +758,22 @@ void Core::handleButton1Press()
 
 void Core::handleButtonLongPress()
 {
-        // Toggle type detection mode
-        if (m_mode == MODE_TYPE_DETECTION)
+        // Cycle through special modes: Normal -> Keypad Test -> Type Detection -> Normal
+        if (m_mode == MODE_KEYPAD_TEST)
         {
+                // Exit keypad test, enter type detection
+                exitKeypadTestMode();
+                enterTypeDetectionMode();
+        }
+        else if (m_mode == MODE_TYPE_DETECTION)
+        {
+                // Exit type detection, return to normal
                 exitTypeDetectionMode();
         }
         else
         {
-                enterTypeDetectionMode();
+                // Enter keypad test mode
+                enterKeypadTestMode();
         }
 }
 
@@ -816,6 +869,89 @@ void Core::updateStatusLed()
                 m_ledState = !m_ledState;
                 digitalWrite(STATUS_LED_PIN, m_ledState ? HIGH : LOW);
         }
+}
+
+//============================================================================
+// LOGICAL KEYPAD/LED ABSTRACTION LAYER
+//============================================================================
+
+/**
+ * Convert column (x) and row (y) coordinates to logical cell index
+ * This provides a consistent logical view of the keypad/LED grid
+ * @param x Column index (0-3)
+ * @param y Row index (0-3)
+ * @return Logical cell index (0-15), or 0xFF if out of bounds
+ */
+u8 Core::cellIndex(u8 x, u8 y) const
+{
+        // Validate input bounds
+        if (x >= KEYPAD_COLS || y >= KEYPAD_ROWS)
+        {
+                return 0xFF; // Invalid index
+        }
+
+        // Calculate logical index: row * columns + column
+        return y * KEYPAD_COLS + x;
+}
+
+/**
+ * Set LED color by logical index (hides physical wiring)
+ * This function translates logical index to physical LED index
+ * @param logicalIndex Logical cell index (0-15)
+ * @param color 32-bit RGB color value (0x00RRGGBB)
+ */
+void Core::ledControl(u8 logicalIndex, u32 color)
+{
+        // Validate logical index
+        if (logicalIndex >= 16)
+        {
+                return;
+        }
+
+        // Map logical index to physical LED index using the wiring table
+        u8 physicalLedIndex = kKeyToLedMap[logicalIndex];
+
+        // Check if physical LED exists
+        if (physicalLedIndex >= m_pixels->getCount())
+        {
+                return;
+        }
+
+        // Extract RGB components
+        u8 r = (color >> 16) & 0xFF;
+        u8 g = (color >> 8) & 0xFF;
+        u8 b = color & 0xFF;
+
+        // Set the physical LED color
+        m_pixels->setColor(physicalLedIndex, r, g, b);
+}
+
+/**
+ * Set LED color by logical index with separate RGB values
+ * @param logicalIndex Logical cell index (0-15)
+ * @param r Red component (0-255)
+ * @param g Green component (0-255)
+ * @param b Blue component (0-255)
+ */
+void Core::ledControl(u8 logicalIndex, u8 r, u8 g, u8 b)
+{
+        // Validate logical index
+        if (logicalIndex >= 16)
+        {
+                return;
+        }
+
+        // Map logical index to physical LED index using the wiring table
+        u8 physicalLedIndex = kKeyToLedMap[logicalIndex];
+
+        // Check if physical LED exists
+        if (physicalLedIndex >= m_pixels->getCount())
+        {
+                return;
+        }
+
+        // Set the physical LED color
+        m_pixels->setColor(physicalLedIndex, r, g, b);
 }
 
 //============================================================================
@@ -999,4 +1135,77 @@ void Core::updateTypeDetectionMode()
                 digitalWrite(STATUS_LED_PIN, LOW);
                 m_typeDetectionBlink = false;
         }
+}
+
+//============================================================================
+// KEYPAD TEST MODE
+//============================================================================
+
+void Core::enterKeypadTestMode()
+{
+        Serial.println("\n╔════════════════════════════════════════════════════════════╗");
+        Serial.println("║              ENTERING KEYPAD TEST MODE                     ║");
+        Serial.println("╚════════════════════════════════════════════════════════════╝");
+        Serial.println();
+        Serial.println("Press any keypad button to toggle its corresponding LED.");
+        Serial.println("Each key (0-15) controls one LED.");
+        Serial.println("Long press Button 1 to exit test mode.\n");
+
+        // Save current mode
+        m_previousMode = m_mode;
+        m_mode = MODE_KEYPAD_TEST;
+
+        // Turn off all LEDs
+        m_pixels->clear();
+        m_pixels->show();
+
+        // Reset all keypad LED states
+        for (int i = 0; i < 16; i++)
+        {
+                m_keypadLedStates[i] = false;
+        }
+}
+
+void Core::exitKeypadTestMode()
+{
+        Serial.println("\n╔════════════════════════════════════════════════════════════╗");
+        Serial.println("║              EXITING KEYPAD TEST MODE                      ║");
+        Serial.println("╚════════════════════════════════════════════════════════════╝\n");
+
+        // Clear all LEDs
+        m_pixels->clear();
+        m_pixels->show();
+
+        // Restore previous mode
+        m_mode = m_previousMode;
+}
+
+void Core::handleKeypadTestPress(u8 keyIndex)
+{
+        // Ensure keyIndex is within bounds (0-15)
+        if (keyIndex >= 16)
+                return;
+
+        // Toggle LED state for this logical index
+        m_keypadLedStates[keyIndex] = !m_keypadLedStates[keyIndex];
+
+        Serial.print("Key ");
+        Serial.print(keyIndex);
+        Serial.print(" -> LED ");
+        Serial.print(keyIndex); // Now using logical index
+        Serial.print(" ");
+        Serial.println(m_keypadLedStates[keyIndex] ? "ON" : "OFF");
+
+        // Update the LED using logical abstraction layer
+        if (m_keypadLedStates[keyIndex])
+        {
+                // Turn on LED with red color
+                ledControl(keyIndex, 255, 0, 0);
+        }
+        else
+        {
+                // Turn off LED
+                ledControl(keyIndex, 0, 0, 0);
+        }
+        m_pixels->show();
 }

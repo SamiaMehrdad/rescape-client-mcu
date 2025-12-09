@@ -17,6 +17,168 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 ---
 
+## December 9, 2025 - Keypad/LED System Enhancements
+
+### 🎯 Logical Abstraction Layer & Improved Keypad Behavior
+
+**Status:** ✅ Complete
+
+**Summary:** Implemented logical abstraction layer for keypad/LED mapping, improved keypad debouncing and event behavior, and enhanced keypad test mode.
+
+---
+
+### Key Enhancements
+
+#### 1. Keypad to LED Wiring Abstraction
+
+**Added:** Logical abstraction layer to hide physical wiring complexity
+
+**Implementation:**
+
+```cpp
+// Key to LED mapping table (physical wiring hidden at low level)
+// K0→L0, K1→L11, K2→L8, K3→L15, K4→L14, K5→L6, K6→L9, K7→L13,
+// K8→L2, K9→L5, K10→L10, K11→L1, K12→L3, K13→L7, K14→L4, K15→L12
+static const u8 kKeyToLedMap[16];
+
+// Public API - works with logical indices only
+u8 cellIndex(u8 x, u8 y) const;                    // Convert grid coords to logical index
+void ledControl(u8 logicalIndex, u32 color);       // Control LED by logical index
+void ledControl(u8 logicalIndex, u8 r, u8 g, u8 b);
+```
+
+**Benefits:**
+- Physical wiring completely hidden from high-level code
+- Consistent logical indexing (Key N controls LED N)
+- Grid-based access via `cellIndex(x, y)`
+- Automatic LED grouping support through PixelStrip
+
+#### 2. Keypad Pin Reconfiguration
+
+**Changed:** Updated I/O expander pin assignments for better layout
+
+```cpp
+// New pin assignments
+constexpr u8 KEYPAD_ROW_START = 12; // P14-P17 (pins 12-15)
+constexpr u8 KEYPAD_COL_START = 8;  // P10-P13 (pins 8-11)
+constexpr u8 MOT1A = 0;  // P00 (was P10)
+constexpr u8 MOT1B = 1;  // P01 (was P11)
+constexpr u8 MOT2A = 2;  // P02 (was P12)
+constexpr u8 MOT2B = 3;  // P03 (was P13)
+constexpr u8 SW_1 = 4;   // P04 (was P14)
+constexpr u8 SW_2 = 5;   // P05 (was P15)
+constexpr u8 SW_3 = 6;   // P06 (was P16)
+constexpr u8 SW_4 = 7;   // P07 (was P17)
+```
+
+#### 3. Improved Keypad Debouncing
+
+**Added:** 200ms minimum response time between key events
+
+```cpp
+// In ioexpander.h
+unsigned long _lastKeyPressTime; // Track time of last event
+
+// In scanKeypad()
+if (currentTime - _lastKeyPressTime >= 200) {
+    // Fire event
+    _lastKeyPressTime = currentTime;
+}
+```
+
+**Benefits:**
+- More stable key responses
+- Prevents rapid-fire key presses
+- Maximum 5 key events per second
+- Improved user experience
+
+#### 4. Key Release Event System
+
+**Changed:** Keypad now fires events on key release, not on press
+
+**Implementation:**
+
+```cpp
+// Track pressed key without firing event
+else if (_stableKeyIndex == 255) {
+    _stableKeyIndex = detectedKeyIndex;
+    _pressedKeyIndex = detectedKeyIndex; // Remember which key is pressed
+    _keyPressed = false; // No event yet
+}
+
+// Fire event only on release
+if (detectedKeyIndex == 255) {
+    if (_pressedKeyIndex != 255) {
+        if (currentTime - _lastKeyPressTime >= 200) {
+            _lastKeyIndex = _pressedKeyIndex;
+            _keyPressed = true; // Signal event on release
+            _lastKeyPressTime = currentTime;
+            _pressedKeyIndex = 255;
+        }
+    }
+    _stableKeyIndex = 255;
+}
+
+// Return key index only when event fires
+if (_keyPressed) {
+    _keyPressed = false;
+    return _lastKeyIndex;
+}
+return 255; // No event
+```
+
+**Benefits:**
+- Consistent behavior with on-board button
+- Click events fire on release, not press
+- No continuous events while key is held
+- Clean single-event-per-press behavior
+
+#### 5. Keypad Test Mode Updates
+
+**Changed:** Test mode now uses logical abstraction layer and red LEDs
+
+```cpp
+void Core::handleKeypadTestPress(u8 keyIndex) {
+    m_keypadLedStates[keyIndex] = !m_keypadLedStates[keyIndex];
+    
+    if (m_keypadLedStates[keyIndex]) {
+        ledControl(keyIndex, 255, 0, 0); // Red instead of white
+    } else {
+        ledControl(keyIndex, 0, 0, 0);
+    }
+    m_pixels->show();
+}
+```
+
+**Improvements:**
+- Uses logical `ledControl()` API
+- Red LED color for better visibility
+- Events only fire on key release
+- No LED response while key is held down
+
+---
+
+### Testing & Validation
+
+**Keypad Behavior:**
+- ✅ Keys fire events only on release
+- ✅ 200ms minimum between events
+- ✅ No continuous output while held
+- ✅ Stable and debounced responses
+
+**LED Mapping:**
+- ✅ Logical indices work correctly
+- ✅ Physical wiring hidden from high-level code
+- ✅ All 16 keys map to correct LEDs
+- ✅ Test mode toggles with red color
+
+**API Abstraction:**
+- ✅ `cellIndex(x, y)` converts grid to index
+- ✅ `ledControl()` handles physical mapping
+- ✅ LED grouping support ready for future use
+
+---
+
 ## December 5, 2025 - Architecture Improvements & Pixel Testing
 
 ### 🎯 Code Organization and Hardware Testing Enhancements

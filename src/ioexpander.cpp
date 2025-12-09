@@ -13,8 +13,8 @@
 IOExpander::IOExpander(u8 address, TwoWire *wire)
     : _address(address), _outputState(0xFFFF) // All pins high by default (pull-ups)
       ,
-      _inputState(0x0000), _wire(wire), _isPresent(false), _lastKeyIndex(255), _lastKeyRow(0xFF), _lastKeyCol(0xFF), _lastKey(0), _keyPressed(false),
-      _stableKeyIndex(255), _rawKeyIndex(255), _debounceCount(0), _lastScanTime(0)
+      _inputState(0x0000), _wire(wire), _isPresent(false), _lastKeyIndex(255), _lastKeyRow(0xFF), _lastKeyCol(0xFF), _lastKey(0), _keyPressed(false), _pressedKeyIndex(255),
+      _stableKeyIndex(255), _rawKeyIndex(255), _debounceCount(0), _lastScanTime(0), _lastKeyPressTime(0)
 {
 }
 
@@ -227,21 +227,36 @@ u8 IOExpander::scanKeypad()
                                 // Key state changed and is stable
                                 if (detectedKeyIndex == 255)
                                 {
-                                        // Key released
+                                        // Key released - Fire the event here!
+                                        if (_pressedKeyIndex != 255)
+                                        {
+                                                // Enforce minimum 200ms between key events
+                                                if (currentTime - _lastKeyPressTime >= 200)
+                                                {
+                                                        _lastKeyIndex = _pressedKeyIndex;
+
+                                                        // Update row/col/char for compatibility
+                                                        _lastKeyRow = _pressedKeyIndex / KEYPAD_COLS;
+                                                        _lastKeyCol = _pressedKeyIndex % KEYPAD_COLS;
+                                                        _lastKey = KEYPAD_KEYS[_lastKeyRow][_lastKeyCol];
+                                                        _keyPressed = true;              // Signal that event should fire
+                                                        _lastKeyPressTime = currentTime; // Record time of event
+
+                                                        _pressedKeyIndex = 255; // Clear pressed key
+                                                }
+                                                else
+                                                {
+                                                        _pressedKeyIndex = 255; // Clear but don't fire event
+                                                }
+                                        }
                                         _stableKeyIndex = 255;
-                                        _keyPressed = false;
                                 }
                                 else if (_stableKeyIndex == 255)
                                 {
-                                        // New key pressed (only trigger if previous was released)
+                                        // New key pressed - Just track it, don't fire event yet
                                         _stableKeyIndex = detectedKeyIndex;
-                                        _lastKeyIndex = detectedKeyIndex;
-
-                                        // Update row/col/char for compatibility
-                                        _lastKeyRow = detectedKeyIndex / KEYPAD_COLS;
-                                        _lastKeyCol = detectedKeyIndex % KEYPAD_COLS;
-                                        _lastKey = KEYPAD_KEYS[_lastKeyRow][_lastKeyCol];
-                                        _keyPressed = true;
+                                        _pressedKeyIndex = detectedKeyIndex; // Remember which key is pressed
+                                        _keyPressed = false;                 // No event yet
                                 }
                         }
                 }
@@ -253,7 +268,14 @@ u8 IOExpander::scanKeypad()
                 _debounceCount = 1;
         }
 
-        return _stableKeyIndex;
+        // Only return a valid key index when an event should fire (key released)
+        // Otherwise return 255 to indicate no event
+        if (_keyPressed)
+        {
+                _keyPressed = false; // Clear the flag after returning
+                return _lastKeyIndex;
+        }
+        return 255; // No event to fire
 }
 
 /**

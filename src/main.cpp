@@ -47,7 +47,7 @@ volatile bool pixelUpdateFlag = false;
 Synth synth(SPKR_PIN, AUDIO_PWM_CHANNEL);
 
 // PixelStrip(pin, logicalCount, groupSize, brightness)
-PixelStrip pixels(PIXEL_PIN, 8, 1, 5);
+PixelStrip pixels(PIXEL_PIN, 16, 1, 5);
 
 // RS-485 communication for Room Bus
 RoomSerial roomBus(RX_PIN, TX_PIN, -1, 9600);
