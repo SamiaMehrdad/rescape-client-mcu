@@ -34,32 +34,21 @@ void PixelStrip::begin()
         pixels.show(); // Initialize all pixels to 'off'
 }
 
+void PixelStrip::setColor(u8 index, u32 color)
+{
+        // Extract RGB and delegate to RGB version
+        u8 r = (color >> 16) & 0xFF;
+        u8 g = (color >> 8) & 0xFF;
+        u8 b = color & 0xFF;
+        setColor(index, r, g, b);
+}
+
 void PixelStrip::setColor(u8 index, u8 r, u8 g, u8 b)
 {
         if (index < logicalCount)
         {
                 // Update buffer
                 colorBuffer[index] = ((u32)r << 16) | ((u32)g << 8) | b;
-
-                // Set all LEDs in this group to the same color
-                u8 startLed = index * groupSize;
-                for (u8 i = 0; i < groupSize; i++)
-                {
-                        pixels.setPixelColor(startLed + i, pixels.Color(r, g, b));
-                }
-        }
-}
-
-void PixelStrip::setColor(u8 index, u32 color)
-{
-        if (index < logicalCount)
-        {
-                // Update buffer
-                colorBuffer[index] = color;
-
-                u8 r = (color >> 16) & 0xFF;
-                u8 g = (color >> 8) & 0xFF;
-                u8 b = color & 0xFF;
 
                 // Set all LEDs in this group to the same color
                 u8 startLed = index * groupSize;

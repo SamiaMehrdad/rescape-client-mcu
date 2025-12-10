@@ -152,9 +152,9 @@ u16 IOExpander::read()
  */
 u8 IOExpander::scanKeypad()
 {
-        // Rate limiting: Only scan every 10ms
+        // Rate limiting: Only scan every SCAN_RATE_MS
         unsigned long currentTime = millis();
-        if (currentTime - _lastScanTime < 10)
+        if (currentTime - _lastScanTime < KeypadConfig::SCAN_RATE_MS)
         {
                 return _stableKeyIndex; // Return last stable key
         }
@@ -219,9 +219,9 @@ u8 IOExpander::scanKeypad()
                 // Same key as last scan - increment stability counter
                 _debounceCount++;
 
-                if (_debounceCount >= 3)
+                if (_debounceCount >= KeypadConfig::DEBOUNCE_COUNT)
                 {
-                        // Key is stable (3+ consecutive reads)
+                        // Key is stable (DEBOUNCE_COUNT consecutive reads)
                         if (detectedKeyIndex != _stableKeyIndex)
                         {
                                 // Key state changed and is stable
@@ -230,8 +230,8 @@ u8 IOExpander::scanKeypad()
                                         // Key released - Fire the event here!
                                         if (_pressedKeyIndex != 255)
                                         {
-                                                // Enforce minimum 200ms between key events
-                                                if (currentTime - _lastKeyPressTime >= 200)
+                                                // Enforce minimum MIN_PRESS_INTERVAL_MS between key events
+                                                if (currentTime - _lastKeyPressTime >= KeypadConfig::MIN_PRESS_INTERVAL_MS)
                                                 {
                                                         _lastKeyIndex = _pressedKeyIndex;
 

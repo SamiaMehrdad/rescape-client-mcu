@@ -8,6 +8,8 @@
 #include "roomserial.h"
 #include "colors.h"
 #include "mcupins.h"
+#include "ioexpander.h" // For KEYPAD_SIZE
+#include "matrixpanel.h"
 #include <Preferences.h>
 
 // Core firmware modes
@@ -76,11 +78,14 @@ public:
         void setStatusLed(StatusLedMode mode);
         void updateStatusLed(); // Call frequently from main loop
 
-        // Logical keypad/LED abstraction layer
-        // These functions hide the physical wiring and provide logical indexing
+        // Logical keypad/LED abstraction layer (delegates to MatrixPanel)
+        // These functions provide convenient access to the matrix panel
         u8 cellIndex(u8 x, u8 y) const;                     // Convert column(x), row(y) to logical cell index (0-15)
         void ledControl(u8 logicalIndex, u32 color);        // Set LED color by logical index (hides physical wiring)
         void ledControl(u8 logicalIndex, u8 r, u8 g, u8 b); // Set LED color by logical index with RGB values
+
+        // Direct access to matrix panel for advanced operations
+        MatrixPanel *getMatrixPanel() { return m_matrixPanel; }
 
 private:
         // Hardware references
@@ -89,6 +94,7 @@ private:
         Animation *m_animation;
         InputManager *m_inputManager;
         RoomSerial *m_roomBus;
+        MatrixPanel *m_matrixPanel; // Keypad+LED matrix abstraction
 
         // Core state
         CoreMode m_mode;
@@ -97,7 +103,7 @@ private:
         bool m_pixelCheckDone; // Track if pixel check has been performed
 
         // Keypad test mode state
-        bool m_keypadLedStates[16]; // Track LED state for each keypad button (on/off)
+        bool m_keypadLedStates[KEYPAD_SIZE]; // Track LED state for each keypad button (on/off)
 
         // Non-volatile storage for device type
         Preferences m_preferences;
@@ -133,12 +139,6 @@ private:
 
         // MIDI note mapping for keypad - defined in core.cpp
         static const int kNoteMap[16];
-
-        // Key to LED mapping - defined in core.cpp
-        // Maps physical key index (0-15) to corresponding LED index
-        // Based on wiring: K0→L0, K1→L11, K2→L8, K3→L15, K4→L14, K5→L6, K6→L9, K7→L13,
-        //                  K8→L2, K9→L5, K10→L10, K11→L1, K12→L3, K13→L7, K14→L4, K15→L12
-        static const u8 kKeyToLedMap[16];
 
         // Event handlers
         static void onInputEvent(InputEvent event);

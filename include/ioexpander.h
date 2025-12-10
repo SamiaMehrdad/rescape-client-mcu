@@ -21,8 +21,17 @@ constexpr u8 IO_EXPANDER_BASE_ADDR = 0x20;
 // Keypad matrix configuration (4x4 matrix)
 constexpr u8 KEYPAD_ROWS = 4;
 constexpr u8 KEYPAD_COLS = 4;
-constexpr u8 KEYPAD_ROW_START = 12; // P14-P17 (pins 12-15)
-constexpr u8 KEYPAD_COL_START = 8;  // P10-P13 (pins 8-11)
+constexpr u8 KEYPAD_SIZE = KEYPAD_ROWS * KEYPAD_COLS; // Total keys (16)
+constexpr u8 KEYPAD_ROW_START = 12;                   // P14-P17 (pins 12-15)
+constexpr u8 KEYPAD_COL_START = 8;                    // P10-P13 (pins 8-11)
+
+// Keypad scanning configuration
+namespace KeypadConfig
+{
+        constexpr unsigned long SCAN_RATE_MS = 10;           // Scan every 10ms
+        constexpr u8 DEBOUNCE_COUNT = 3;                     // 3 stable reads required
+        constexpr unsigned long MIN_PRESS_INTERVAL_MS = 200; // Minimum 200ms between events
+}
 
 // Motor control pins (H-bridge control)
 constexpr u8 MOT1A = 0; // P00

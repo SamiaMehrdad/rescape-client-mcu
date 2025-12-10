@@ -6,6 +6,7 @@
  ***************************************************************/
 
 #include "core.h"
+#include "deviceconfig.h"
 #include <Arduino.h>
 #include "mcupins.h"
 #include "buttons.h"
@@ -74,30 +75,7 @@ const int Core::kNoteMap[16] = {
     NOTE_D5, NOTE_E5, NOTE_F5, NOTE_G5,
     NOTE_A5, NOTE_B5, NOTE_C6, NOTE_D6};
 
-// Key to LED mapping (16 keys -> 16 LEDs)
-// Maps physical key index to corresponding LED index based on wiring
-// K0→L0, K1→L11, K2→L8, K3→L15, K4→L14, K5→L6, K6→L9, K7→L13,
-// K8→L2, K9→L5, K10→L10, K11→L1, K12→L3, K13→L7, K14→L4, K15→L12
-const u8 Core::kKeyToLedMap[16] = {
-    0,  // K0  -> L0
-    7,  // K1  -> L7
-    8,  // K2  -> L8
-    15, // K3  -> L15
-    1,  // K4  -> L1
-    6,  // K5  -> L6
-    9,  // K6  -> L9
-    14, // K7  -> L14
-    2,  // K8  -> L2
-    5,  // K9  -> L5
-    10, // K10 -> L10
-    13, // K11 -> L13
-    3,  // K12 -> L3
-    4,  // K13 -> L4
-    11, // K14 -> L11
-    12  // K15 -> L12
-};
-
-// Device type names (0-63, currently using 0-31)
+// LED patterns for status indication
 // These are placeholder names at the Core firmware level.
 // High-level App code should implement its own type name mapping
 // for application-specific device types.
@@ -107,7 +85,7 @@ const char *Core::kDeviceTypeNames[64] = {
     "Terminal", "GlowButton", "NumBox", "Timer",
     "GlowDots", "QB", "RGBMixer", "Bomb",
     "FinalOrder", "BallGate", "Actuator", "TheWall",
-    "Scores", "TYPE_13", "TYPE_14", "TYPE_15",
+    "Scores", "BallBase", "TYPE_14", "TYPE_15",
     "TYPE_16", "TYPE_17", "TYPE_18", "TYPE_19",
     "TYPE_20", "TYPE_21", "TYPE_22", "TYPE_23",
     "TYPE_24", "TYPE_25", "TYPE_26", "TYPE_27",
@@ -139,6 +117,7 @@ Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
       m_animation(animation),
       m_inputManager(inputManager),
       m_roomBus(roomBus),
+      m_matrixPanel(new MatrixPanel(pixels)), // Initialize matrix panel
       m_mode(MODE_INTERACTIVE),
       m_colorIndex(0),
       m_deviceType(0),
@@ -428,6 +407,11 @@ void Core::printBootReport()
                 }
                 Serial.println();
         }
+
+        // Device hardware configuration
+        Serial.println("│");
+        Serial.println("│ Hardware Config:");
+        DeviceConfigurations::printHardwareConfig(m_deviceType, "│   ");
 
         // Mode status
         Serial.print("│ Operating Mode:    ");
@@ -872,7 +856,7 @@ void Core::updateStatusLed()
 }
 
 //============================================================================
-// LOGICAL KEYPAD/LED ABSTRACTION LAYER
+// LOGICAL KEYPAD/LED ABSTRACTION LAYER (Delegates to MatrixPanel)
 //============================================================================
 
 /**
@@ -884,14 +868,7 @@ void Core::updateStatusLed()
  */
 u8 Core::cellIndex(u8 x, u8 y) const
 {
-        // Validate input bounds
-        if (x >= KEYPAD_COLS || y >= KEYPAD_ROWS)
-        {
-                return 0xFF; // Invalid index
-        }
-
-        // Calculate logical index: row * columns + column
-        return y * KEYPAD_COLS + x;
+        return m_matrixPanel->cellIndex(x, y);
 }
 
 /**
@@ -902,28 +879,7 @@ u8 Core::cellIndex(u8 x, u8 y) const
  */
 void Core::ledControl(u8 logicalIndex, u32 color)
 {
-        // Validate logical index
-        if (logicalIndex >= 16)
-        {
-                return;
-        }
-
-        // Map logical index to physical LED index using the wiring table
-        u8 physicalLedIndex = kKeyToLedMap[logicalIndex];
-
-        // Check if physical LED exists
-        if (physicalLedIndex >= m_pixels->getCount())
-        {
-                return;
-        }
-
-        // Extract RGB components
-        u8 r = (color >> 16) & 0xFF;
-        u8 g = (color >> 8) & 0xFF;
-        u8 b = color & 0xFF;
-
-        // Set the physical LED color
-        m_pixels->setColor(physicalLedIndex, r, g, b);
+        m_matrixPanel->ledControl(logicalIndex, color);
 }
 
 /**
@@ -935,23 +891,7 @@ void Core::ledControl(u8 logicalIndex, u32 color)
  */
 void Core::ledControl(u8 logicalIndex, u8 r, u8 g, u8 b)
 {
-        // Validate logical index
-        if (logicalIndex >= 16)
-        {
-                return;
-        }
-
-        // Map logical index to physical LED index using the wiring table
-        u8 physicalLedIndex = kKeyToLedMap[logicalIndex];
-
-        // Check if physical LED exists
-        if (physicalLedIndex >= m_pixels->getCount())
-        {
-                return;
-        }
-
-        // Set the physical LED color
-        m_pixels->setColor(physicalLedIndex, r, g, b);
+        m_matrixPanel->ledControl(logicalIndex, r, g, b);
 }
 
 //============================================================================
@@ -1097,6 +1037,9 @@ void Core::updateTypeDetectionMode()
                                 Serial.print(" (");
                                 Serial.print(m_deviceType);
                                 Serial.println(")");
+                                Serial.println();
+                                DeviceConfigurations::printHardwareConfig(m_deviceType, "  ");
+                                Serial.println();
                                 m_lastDetectedType = m_deviceType;
                         }
                         else if (m_deviceType != m_lastDetectedType)
@@ -1111,6 +1054,9 @@ void Core::updateTypeDetectionMode()
                                 Serial.print(" (");
                                 Serial.print(m_deviceType);
                                 Serial.println(")");
+                                Serial.println();
+                                DeviceConfigurations::printHardwareConfig(m_deviceType, "  ");
+                                Serial.println();
                                 m_lastDetectedType = m_deviceType;
                         }
                         else

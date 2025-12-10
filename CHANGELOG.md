@@ -17,6 +17,120 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 ---
 
+## December 9, 2025 - Device Configuration System (X-Macro Pattern)
+
+### 🎯 Centralized Hardware Configuration with Single Source of Truth
+
+**Status:** ✅ Complete
+
+**Summary:** Created comprehensive device configuration system using X-Macro pattern for maintaining device types and hardware configurations in a single location. All 64 device types compiled into firmware with runtime selection via potentiometer.
+
+**Changes:**
+
+1. **X-Macro Pattern for Device Types**
+   - Single `DEVICE_TYPE_LIST` macro defines all device types once
+   - Automatically generates both `DeviceType` enum and `DEVICE_TYPE_NAMES` array
+   - Eliminates duplication between enum values and display names
+   - Easy maintenance: add new device by editing one line
+
+2. **Device Configuration Database**
+   - `DeviceConfig` struct defines hardware per device type:
+     - Matrix cell count (0-16)
+     - Motor names (0-2 motors)
+     - Switch names (0-4 switches)
+   - 14 device types fully configured (Terminal, GlowButton, NumBox, Timer, GlowDots, QB, RGBMixer, Bomb, FinalOrder, BallGate, Actuator, TheWall, Scores, BallBase)
+   - 50 placeholder types (TYPE_14 through TYPE_63) for future expansion
+
+3. **Hardware Config Display**
+   - Added `DeviceConfigurations::printHardwareConfig()` function
+   - Integrated into boot report showing device's motors, switches, matrix cells
+   - Real-time config display during device type calibration
+   - Helps verify correct hardware assignment when changing device types
+
+4. **Core Integration**
+   - Boot report now shows hardware configuration for current device type
+   - Device type calibration mode displays hardware config as you turn potentiometer
+   - Immediate visual feedback of what hardware each device type uses
+
+**Benefits:**
+- ✅ **Single source of truth** - Device types defined once, used everywhere
+- ✅ **No recompilation needed** - All 64 types compiled in, selected at runtime
+- ✅ **Easy maintenance** - Add new device by editing one macro entry
+- ✅ **Type-safe** - Proper `enum DeviceType : u8` with compiler checks
+- ✅ **Scalable** - Supports 64 device types (6-bit addressing)
+- ✅ **Self-documenting** - Hardware config visible in serial monitor
+
+**Files Created:**
+- `include/deviceconfig.h` - X-Macro definitions, DeviceType enum, DeviceConfig struct
+- `src/deviceconfig.cpp` - Configuration database for all 64 types
+- `DEVICE_CONFIGURATION.md` - System documentation
+
+**Files Modified:**
+- `src/core.cpp` - Added hardware config display to boot report and calibration
+- Updated boot report format with hardware configuration section
+
+**Example Output:**
+```
+┌─ DEVICE CONFIGURATION ─────────────────────────────────────┐
+│ Device Type:       QB (Index: 5)
+│ Configuration:     Stored in NVS
+│
+│ Hardware Config:
+│   Matrix Cells:  8
+│   Motors:        2
+│     Motor 0:     Servo1
+│     Motor 1:     Servo2
+│   Switches:      4
+│     Switch 0:    Input1
+│     Switch 1:    Input2
+│     Switch 2:    Input3
+│     Switch 3:    Input4
+```
+
+---
+
+## December 9, 2025 - MatrixPanel Class Refactoring
+
+### 🏗️ Separated Keypad+LED Matrix into Dedicated Class
+
+**Status:** ✅ Complete
+
+**Summary:** Created `MatrixPanel` class to encapsulate all keypad+LED matrix functionality, improving code organization and reusability.
+
+**Changes:**
+
+1. **New MatrixPanel Class**
+
+    - Created `include/matrixpanel.h` with full matrix API
+    - Created `src/matrixpanel.cpp` with implementation
+    - Moved `kKeyToLedMap[16]` from Core to MatrixPanel
+    - Added high-level methods: `clear()`, `fill()`, `setCell(x,y)`
+    - Provides logical-to-physical LED mapping abstraction
+
+2. **Core Class Refactoring**
+
+    - Added `MatrixPanel *m_matrixPanel` member
+    - Simplified `cellIndex()` and `ledControl()` to delegate to MatrixPanel
+    - Added `getMatrixPanel()` accessor for direct access
+    - Removed LED mapping logic from Core
+    - Maintains backward compatibility with existing code
+
+3. **Benefits**
+    - Separation of concerns (Core = firmware logic, MatrixPanel = hardware)
+    - Improved code reusability and maintainability
+    - Enhanced API with new matrix operations
+    - Clear abstraction suitable for other projects
+
+**Files Modified:**
+
+-   `include/matrixpanel.h` (new)
+-   `src/matrixpanel.cpp` (new)
+-   `include/core.h` (updated)
+-   `src/core.cpp` (updated)
+-   `MATRIXPANEL_REFACTORING.md` (new documentation)
+
+---
+
 ## December 9, 2025 - Keypad/LED System Enhancements
 
 ### 🎯 Logical Abstraction Layer & Improved Keypad Behavior
@@ -48,10 +162,11 @@ void ledControl(u8 logicalIndex, u8 r, u8 g, u8 b);
 ```
 
 **Benefits:**
-- Physical wiring completely hidden from high-level code
-- Consistent logical indexing (Key N controls LED N)
-- Grid-based access via `cellIndex(x, y)`
-- Automatic LED grouping support through PixelStrip
+
+-   Physical wiring completely hidden from high-level code
+-   Consistent logical indexing (Key N controls LED N)
+-   Grid-based access via `cellIndex(x, y)`
+-   Automatic LED grouping support through PixelStrip
 
 #### 2. Keypad Pin Reconfiguration
 
@@ -87,10 +202,11 @@ if (currentTime - _lastKeyPressTime >= 200) {
 ```
 
 **Benefits:**
-- More stable key responses
-- Prevents rapid-fire key presses
-- Maximum 5 key events per second
-- Improved user experience
+
+-   More stable key responses
+-   Prevents rapid-fire key presses
+-   Maximum 5 key events per second
+-   Improved user experience
 
 #### 4. Key Release Event System
 
@@ -128,10 +244,11 @@ return 255; // No event
 ```
 
 **Benefits:**
-- Consistent behavior with on-board button
-- Click events fire on release, not press
-- No continuous events while key is held
-- Clean single-event-per-press behavior
+
+-   Consistent behavior with on-board button
+-   Click events fire on release, not press
+-   No continuous events while key is held
+-   Clean single-event-per-press behavior
 
 #### 5. Keypad Test Mode Updates
 
@@ -140,7 +257,7 @@ return 255; // No event
 ```cpp
 void Core::handleKeypadTestPress(u8 keyIndex) {
     m_keypadLedStates[keyIndex] = !m_keypadLedStates[keyIndex];
-    
+
     if (m_keypadLedStates[keyIndex]) {
         ledControl(keyIndex, 255, 0, 0); // Red instead of white
     } else {
@@ -151,31 +268,35 @@ void Core::handleKeypadTestPress(u8 keyIndex) {
 ```
 
 **Improvements:**
-- Uses logical `ledControl()` API
-- Red LED color for better visibility
-- Events only fire on key release
-- No LED response while key is held down
+
+-   Uses logical `ledControl()` API
+-   Red LED color for better visibility
+-   Events only fire on key release
+-   No LED response while key is held down
 
 ---
 
 ### Testing & Validation
 
 **Keypad Behavior:**
-- ✅ Keys fire events only on release
-- ✅ 200ms minimum between events
-- ✅ No continuous output while held
-- ✅ Stable and debounced responses
+
+-   ✅ Keys fire events only on release
+-   ✅ 200ms minimum between events
+-   ✅ No continuous output while held
+-   ✅ Stable and debounced responses
 
 **LED Mapping:**
-- ✅ Logical indices work correctly
-- ✅ Physical wiring hidden from high-level code
-- ✅ All 16 keys map to correct LEDs
-- ✅ Test mode toggles with red color
+
+-   ✅ Logical indices work correctly
+-   ✅ Physical wiring hidden from high-level code
+-   ✅ All 16 keys map to correct LEDs
+-   ✅ Test mode toggles with red color
 
 **API Abstraction:**
-- ✅ `cellIndex(x, y)` converts grid to index
-- ✅ `ledControl()` handles physical mapping
-- ✅ LED grouping support ready for future use
+
+-   ✅ `cellIndex(x, y)` converts grid to index
+-   ✅ `ledControl()` handles physical mapping
+-   ✅ LED grouping support ready for future use
 
 ---
 
