@@ -129,11 +129,12 @@ struct NamedComponent
 /**
  * @brief Complete device hardware configuration
  * Simple configuration with component names (nullptr = not used)
+ * 
+ * Note: Device type is implicit from array index in kConfigs[].
+ * kConfigs[0] = TERMINAL, kConfigs[1] = GLOW_BUTTON, etc.
  */
 struct DeviceConfig
 {
-        u8 deviceType; // Device type ID (0-63)
-
         // Matrix cells (keypad + LED pairs)
         u8 matrixCellCount; // Number of matrix cells used (0-16)
 
