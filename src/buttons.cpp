@@ -16,6 +16,12 @@ static u8 buttonPins[NUM_BUTTONS];
 
 // Internal helper -----------------------------------------------------------
 // Applies debounce, short-press, and long-press detection to a single button.
+/************************* updateButton ***********************************
+ * Internal: debounce and detect short/long presses for one button.
+ * @param index Button index.
+ * @param pin GPIO pin number.
+ * @param now Current time (ms).
+ ***************************************************************/
 static void updateButton(u8 index, u8 pin, u32 now)
 {
         ButtonState &button = buttons[index];
@@ -63,7 +69,10 @@ static void updateButton(u8 index, u8 pin, u32 now)
 
 // Public API ----------------------------------------------------------------
 
-// Initialize button pins
+/************************* initButtons ************************************
+ * Initialize button pins and state.
+ * @param btn1Pin GPIO for BTN1.
+ ***************************************************************/
 void initButtons(u8 btn1Pin)
 {
         buttonPins[BTN1] = btn1Pin;
@@ -86,14 +95,19 @@ void initButtons(u8 btn1Pin)
         }
 }
 
-// Update button states (call from a timer ISR or frequently in loop)
+/************************* updateButtons **********************************
+ * Refresh button state; call from ISR or often in loop.
+ ***************************************************************/
 void updateButtons()
 {
         u32 now = millis();
         updateButton(BTN1, buttonPins[BTN1], now);
 }
 
-// Query whether a button is currently held down (active-low)
+/************************* keyDown ****************************************
+ * Check if a button is currently held (active-low).
+ * @param btn Button index.
+ ***************************************************************/
 bool keyDown(u8 btn)
 {
         if (btn >= NUM_BUTTONS)
@@ -101,7 +115,10 @@ bool keyDown(u8 btn)
         return buttons[btn].current;
 }
 
-// Report a single short-press event, latched until read
+/************************* keyPressed *************************************
+ * Report latched short-press event (clears on read).
+ * @param btn Button index.
+ ***************************************************************/
 bool keyPressed(u8 btn)
 {
         if (btn >= NUM_BUTTONS)
@@ -115,7 +132,10 @@ bool keyPressed(u8 btn)
         return result;
 }
 
-// Report a single release event, regardless of press duration
+/************************* keyReleased ************************************
+ * Report latched release event (clears on read).
+ * @param btn Button index.
+ ***************************************************************/
 bool keyReleased(u8 btn)
 {
         if (btn >= NUM_BUTTONS)
@@ -129,7 +149,10 @@ bool keyReleased(u8 btn)
         return result;
 }
 
-// Report when the long-press threshold is reached while the button is held
+/************************* keyLongPressed *********************************
+ * Report latched long-press event (clears on read).
+ * @param btn Button index.
+ ***************************************************************/
 bool keyLongPressed(u8 btn)
 {
         if (btn >= NUM_BUTTONS)

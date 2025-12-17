@@ -330,8 +330,7 @@ void IRAM_ATTR myCallback() {
 }
 
 hw_timer_t *timer = ESPTimer::begin(0, 10, &myCallback);  // 10ms timer
-ESPTimer::stop(timer);
-ESPTimer::start(timer);
+// Use `ESPTimer` returned handle as needed. start/stop APIs removed.
 ````
 
 ### IOExpander
@@ -345,7 +344,6 @@ IOExpander io(0x20, &Wire);
 io.begin();
 
 u8 key = io.scanKeypad();        // Returns 0-15 or 255
-u16 bitmap = io.getKeypadBitmap(); // Multi-key detection
 bool sw = io.readSwitch1();
 io.setMotorA(MOTOR_FORWARD);
 ```

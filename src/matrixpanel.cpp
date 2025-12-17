@@ -40,6 +40,9 @@
  * K8→L2,  K9→L5,  K10→L10, K11→L13
  * K12→L3, K13→L4, K14→L11, K15→L12
  */
+/************************* kKeyToLedMap ************************************
+ * Logical key (0-15) to physical LED index mapping.
+ ***************************************************************/
 const u8 MatrixPanel::kKeyToLedMap[KEYPAD_SIZE] = {
     0,  // K0  -> L0
     7,  // K1  -> L7
@@ -71,6 +74,9 @@ const u8 MatrixPanel::kKeyToLedMap[KEYPAD_SIZE] = {
  * The PixelStrip must be already initialized and remain valid for the lifetime
  * of this MatrixPanel instance.
  */
+/************************* MatrixPanel constructor **************************
+ * Construct with PixelStrip controller reference.
+ ***************************************************************/
 MatrixPanel::MatrixPanel(PixelStrip *pixels) : m_pixels(pixels)
 {
 }
@@ -96,6 +102,9 @@ MatrixPanel::MatrixPanel(PixelStrip *pixels) : m_pixels(pixels)
  * - cellIndex(2, 1) = 6  (column 2, row 1)
  * - cellIndex(4, 0) = 0xFF (out of bounds)
  */
+/************************* cellIndex **************************************
+ * Convert (x,y) grid to logical index; 0xFF if OOB.
+ ***************************************************************/
 u8 MatrixPanel::cellIndex(u8 x, u8 y) const
 {
         // Validate input bounds
@@ -126,6 +135,11 @@ u8 MatrixPanel::cellIndex(u8 x, u8 y) const
  * - ledControl(5, 0x00FF00) - Set cell 5 to green
  * - ledControl(15, 0x0000FF) - Set cell 15 to blue
  */
+/************************* ledControl (packed) *****************************
+ * Set LED by logical index using packed color.
+ * @param logicalIndex 0-15 logical cell.
+ * @param color 0x00RRGGBB color.
+ ***************************************************************/
 void MatrixPanel::ledControl(u8 logicalIndex, u32 color)
 {
         // Extract RGB components and delegate to RGB version
@@ -156,6 +170,9 @@ void MatrixPanel::ledControl(u8 logicalIndex, u32 color)
  * - ledControl(5, 0, 255, 0) - Set cell 5 to full green
  * - ledControl(15, 128, 128, 255) - Set cell 15 to light blue
  */
+/************************* ledControl (RGB) ********************************
+ * Set LED by logical index using separate RGB.
+ ***************************************************************/
 void MatrixPanel::ledControl(u8 logicalIndex, u8 r, u8 g, u8 b)
 {
         // Validate logical index
@@ -195,6 +212,9 @@ void MatrixPanel::ledControl(u8 logicalIndex, u8 r, u8 g, u8 b)
  * - setCell(3, 3, 0x00FF00) - Set bottom-right to green
  * - setCell(2, 1, 0x0000FF) - Set column 2, row 1 to blue
  */
+/************************* setCell (packed) ********************************
+ * Set LED by grid coords with packed color.
+ ***************************************************************/
 void MatrixPanel::setCell(u8 x, u8 y, u32 color)
 {
         u8 index = cellIndex(x, y);
@@ -220,6 +240,9 @@ void MatrixPanel::setCell(u8 x, u8 y, u32 color)
  * - setCell(3, 3, 0, 255, 0) - Set bottom-right to green
  * - setCell(2, 1, 0, 0, 255) - Set column 2, row 1 to blue
  */
+/************************* setCell (RGB) ***********************************
+ * Set LED by grid coords with RGB components.
+ ***************************************************************/
 void MatrixPanel::setCell(u8 x, u8 y, u8 r, u8 g, u8 b)
 {
         u8 index = cellIndex(x, y);
@@ -242,6 +265,9 @@ void MatrixPanel::setCell(u8 x, u8 y, u8 r, u8 g, u8 b)
  * Implementation iterates through all logical indices (0-15) and sets
  * each to black. The physical LED mapping is handled automatically.
  */
+/************************* clear ******************************************
+ * Turn off all logical LEDs.
+ ***************************************************************/
 void MatrixPanel::clear()
 {
         for (u8 i = 0; i < KEYPAD_SIZE; i++)
@@ -264,6 +290,9 @@ void MatrixPanel::clear()
  * - fill(0xFFFF00) - Fill with yellow
  * - fill(0x800080) - Fill with purple
  */
+/************************* fill (packed) ***********************************
+ * Fill all LEDs with packed color.
+ ***************************************************************/
 void MatrixPanel::fill(u32 color)
 {
         for (u8 i = 0; i < KEYPAD_SIZE; i++)
@@ -289,6 +318,9 @@ void MatrixPanel::fill(u32 color)
  * - fill(128, 0, 128) - Fill with purple
  * - fill(255, 255, 255) - Fill with white (full brightness)
  */
+/************************* fill (RGB) **************************************
+ * Fill all LEDs with RGB color.
+ ***************************************************************/
 void MatrixPanel::fill(u8 r, u8 g, u8 b)
 {
         for (u8 i = 0; i < KEYPAD_SIZE; i++)

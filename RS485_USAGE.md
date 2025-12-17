@@ -97,12 +97,13 @@ roomBus.sendFrame(&txFrame);
 
 ### Command Examples
 
-#### Server → Device (0x20-0x7F)
+#### Server → Device (0x40-0x7F)
 
 ```cpp
 CMD_GLOW_SET_COLOR = 0x20   // Set LED color
-CMD_TMR_START = 0x2A        // Start timer
-CMD_ACT_OPEN = 0x34         // Open actuator
+// Server→device commands share a common numeric value (0x20).
+// The destination address selects which device interprets the command.
+CMD_DEVICE_ACTION = 0x20    // Device-specific action (interpretation depends on device address)
 ```
 
 #### Device → Server (0x80-0xFF)

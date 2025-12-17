@@ -16,180 +16,112 @@
 // DEVICE CONFIGURATION DATABASE
 //============================================================================
 
+
+/************************* kCommonCommands ********************************
+ * Commands shared by all device types (hello/ack/ping/reset)
+ ***************************************************************/
+static const CommandSet kCommonCommands = makeCommandSet({CORE_HELLO, CORE_ACK, CORE_PING, CORE_RESET});
+
 const DeviceConfig DeviceConfigurations::kConfigs[MAX_DEVICE_TYPES] = {
-    // TYPE 0: Terminal - Full 4x4 keypad with LEDs
-    {
-        .matrixCellCount = 16, // Full 4x4 matrix
-        .motors = {},          // No motors (all nullptr)
-        .switches = {},        // No switches (all nullptr)
-        .isConfigured = true},
+    // TYPE 0: Terminal - Full 4x4 keypad with LEDs (uses default key names)
+    {.cellCount = 16, // Full 4x4 matrix
+     .keys = {},      // Use default names: "1","2","3","A", "4","5","6","B", etc.
+     .motors = {},    // No motors
+     .commands = makeCommandSet({TERM_RESET})},
 
     // TYPE 1: GlowButton - Single button with LED
-    {
-        .matrixCellCount = 1, // Single button
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 1, // Single button
+     .keys = {
+         // Custom name for the single key
+         {"Activate"} // Key 0: "Activate" instead of "1"
+     },
+     .motors = {},
+     .commands = makeCommandSet({GLOW_SET_COLOR})},
 
     // TYPE 2: NumBox - Numeric keypad (10 keys: 0-9)
-    {
-        .matrixCellCount = 10, // Numeric pad
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 4 * 6 * 7, // 4*6 7segments
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet({NUM_SET_DIGIT_COLOR, NUM_SET_DIGIT_VAL, NUM_SET_ROW_NUM})},
 
     // TYPE 3: Timer - Display with 4 buttons
-    {
-        .matrixCellCount = 4, // Control buttons
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 4, // Control buttons
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet({TMR_SET_COLOR, TMR_SET_VALUE, TMR_START, TMR_PAUSE})},
 
     // TYPE 4: GlowDots - LED display grid
-    {
-        .matrixCellCount = 16, // Full LED grid
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 16, // Full LED grid
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet({DOTS_SET_COLORS, DOTS_SET_MOVE, DOTS_SET_DELAY, DOTS_SET_LED})},
 
     // TYPE 5: QB - Puzzle with buttons and motor
-    {
-        .matrixCellCount = 8, // 2x4 button array
-        .motors = {
-            {"Lock mechanism"} // Motor 1
-        },
-        .switches = {
-            {"Lock position sensor"} // Switch 1
-        },
-        .isConfigured = true},
+    {.cellCount = 16, // 4x4 button array
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet({QB_SET_COLORS, QB_SET_MODES})},
 
     // TYPE 6: RGBMixer - Color mixing interface
-    {
-        .matrixCellCount = 3, // R, G, B controls
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 8, // R, G, B up/down and check buttons
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet()},
 
     // TYPE 7: Bomb - Defusal interface
-    {
-        .matrixCellCount = 16, // Full keypad
-        .motors = {},
-        .switches = {
-            {"Wire 1 status"}, // Switch 1
-            {"Wire 2 status"}  // Switch 2
-        },
-        .isConfigured = true},
+    {.cellCount = 16, // Full keypad
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet({BOMB_SET_STATE})},
 
     // TYPE 8: FinalOrder - Sequence puzzle
-    {
-        .matrixCellCount = 12, // 3x4 sequence buttons
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 12, // 3x4 sequence buttons
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet({FINAL_RESET})},
 
     // TYPE 9: BallGate - Ball release mechanism
-    {
-        .matrixCellCount = 0, // No matrix
-        .motors = {
-            {"Gate servo"} // Motor 1
-        },
-        .switches = {
-            {"Gate open sensor"},  // Switch 1
-            {"Gate closed sensor"} // Switch 2
-        },
-        .isConfigured = true},
+    {.cellCount = 1, // LED only, gate indicator
+     .keys = {},
+     .motors = {
+         {"Gate motor"},  // Gate open
+         {"Reject motor"} // Reject ball
+     },
+     .commands = makeCommandSet()},
 
     // TYPE 10: Actuator - Motor control device
-    {
-        .matrixCellCount = 0, // No matrix
-        .motors = {
-            {"Actuator 1"}, // Motor 1
-            {"Actuator 2"}  // Motor 2
-        },
-        .switches = {
-            {"Limit switch 1"}, // Switch 1
-            {"Limit switch 2"}, // Switch 2
-            {"Limit switch 3"}, // Switch 3
-            {"Limit switch 4"}  // Switch 4
-        },
-        .isConfigured = true},
+    {.cellCount = 0, // No matrix
+     .keys = {},
+     .motors = {
+         {"Actuator 1"}, // Motor 1
+         {"Actuator 2"}  // Motor 2
+     },
+     .commands = makeCommandSet({ACT_OPEN, ACT_CLOSE})},
 
     // TYPE 11: TheWall - Grid puzzle
-    {
-        .matrixCellCount = 16, // Full grid
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 8, // Slots control
+     .keys = {},
+     .motors = {{"Fall"}, {"Remove"}},
+     .commands = makeCommandSet()},
 
     // TYPE 12: Scores - Score display with buttons
-    {
-        .matrixCellCount = 2, // Player buttons
-        .motors = {},
-        .switches = {},
-        .isConfigured = true},
+    {.cellCount = 2, // Player buttons
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet()},
 
     // TYPE 13: BallBase - Ball detection base
-    {
-        .matrixCellCount = 4, // Position indicators
-        .motors = {},
-        .switches = {
-            {"Ball sensor 1"}, // Switch 1
-            {"Ball sensor 2"}, // Switch 2
-            {"Ball sensor 3"}, // Switch 3
-            {"Ball sensor 4"}  // Switch 4
-        },
-        .isConfigured = true},
+    {.cellCount = 4, // Position indicators
+     .keys = {},
+     .motors = {},
+     .commands = makeCommandSet({BALL_ACTIVATE})},
 
-    // TYPES 14-63: Unconfigured (placeholders)
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false},
-    {0, {}, {}, false}};
+    // TYPES 14-63: Unconfigured (default zero-initialized)
+};
 
-//============================================================================
-// PUBLIC ACCESSOR FUNCTIONS
-//============================================================================
-
+/************************* getConfig **************************************
+ * Lookup config pointer for a device type.
+ ***************************************************************/
 const DeviceConfig *DeviceConfigurations::getConfig(u8 deviceType)
 {
         if (deviceType >= MAX_DEVICE_TYPES)
@@ -199,6 +131,9 @@ const DeviceConfig *DeviceConfigurations::getConfig(u8 deviceType)
         return &kConfigs[deviceType];
 }
 
+/************************* getDeviceName **********************************
+ * Get device type name string.
+ ***************************************************************/
 const char *DeviceConfigurations::getDeviceName(u8 deviceType)
 {
         if (deviceType >= MAX_DEVICE_TYPES)
@@ -208,12 +143,14 @@ const char *DeviceConfigurations::getDeviceName(u8 deviceType)
         return DEVICE_TYPE_NAMES[deviceType];
 }
 
-u8 DeviceConfigurations::getMatrixCellCount(u8 deviceType)
-{
-        const DeviceConfig *config = getConfig(deviceType);
-        return config ? config->matrixCellCount : 0;
-}
+/************************* getCellCount ***********************************
+ * Get LED cell count for type.
+ ***************************************************************/
+/* DeviceConfigurations::getCellCount removed (unused). */
 
+/************************* getMotorCount **********************************
+ * Count motors with names for type.
+ ***************************************************************/
 u8 DeviceConfigurations::getMotorCount(u8 deviceType)
 {
         const DeviceConfig *config = getConfig(deviceType);
@@ -234,26 +171,65 @@ u8 DeviceConfigurations::getMotorCount(u8 deviceType)
         return count;
 }
 
-u8 DeviceConfigurations::getSwitchCount(u8 deviceType)
+/************************* getCommandSet **********************************
+ * Get device-specific command set pointer.
+ ***************************************************************/
+const CommandSet *DeviceConfigurations::getCommandSet(u8 deviceType)
 {
+        const DeviceConfig *config = getConfig(deviceType);
+        return config ? &config->commands : nullptr;
+}
+
+/************************* getMergedCommandSet *****************************
+ * Merge common and device-specific commands.
+ ***************************************************************/
+CommandSet DeviceConfigurations::getMergedCommandSet(u8 deviceType)
+{
+        CommandSet merged{};
+
+        // Start with common commands
+        u8 idx = 0;
+        for (u8 i = 0; i < kCommonCommands.count && idx < MAX_COMMANDS; ++i)
+        {
+                merged.cmds[idx++] = kCommonCommands.cmds[i];
+        }
+
+        // Append device-specific commands
+        const CommandSet *deviceCmds = getCommandSet(deviceType);
+        if (deviceCmds)
+        {
+                for (u8 i = 0; i < deviceCmds->count && idx < MAX_COMMANDS; ++i)
+                {
+                        merged.cmds[idx++] = deviceCmds->cmds[i];
+                }
+        }
+
+        merged.count = idx;
+        return merged;
+}
+
+/************************* getKeyName *************************************
+ * Get custom key name for a type/index (nullable).
+ ***************************************************************/
+const char *DeviceConfigurations::getKeyName(u8 deviceType, u8 keyIndex)
+{
+        if (keyIndex >= MAX_KEYS)
+        {
+                return nullptr;
+        }
+
         const DeviceConfig *config = getConfig(deviceType);
         if (!config)
         {
-                return 0;
+                return nullptr;
         }
 
-        // Count switches with non-null names
-        u8 count = 0;
-        for (u8 i = 0; i < MAX_SWITCHES; i++)
-        {
-                if (config->switches[i].name != nullptr)
-                {
-                        count++;
-                }
-        }
-        return count;
+        return config->keys[keyIndex].name;
 }
 
+/************************* getMotorName ***********************************
+ * Get motor name for a type/index (nullable).
+ ***************************************************************/
 const char *DeviceConfigurations::getMotorName(u8 deviceType, u8 motorIndex)
 {
         if (motorIndex >= MAX_MOTORS)
@@ -270,22 +246,9 @@ const char *DeviceConfigurations::getMotorName(u8 deviceType, u8 motorIndex)
         return config->motors[motorIndex].name;
 }
 
-const char *DeviceConfigurations::getSwitchName(u8 deviceType, u8 switchIndex)
-{
-        if (switchIndex >= MAX_SWITCHES)
-        {
-                return nullptr;
-        }
-
-        const DeviceConfig *config = getConfig(deviceType);
-        if (!config)
-        {
-                return nullptr;
-        }
-
-        return config->switches[switchIndex].name;
-}
-
+/************************* printConfig ************************************
+ * Print detailed config for a device type.
+ ***************************************************************/
 void DeviceConfigurations::printConfig(u8 deviceType)
 {
         const DeviceConfig *config = getConfig(deviceType);
@@ -301,14 +264,33 @@ void DeviceConfigurations::printConfig(u8 deviceType)
         Serial.print(" (");
         Serial.print(getDeviceName(deviceType));
         Serial.println(")");
-        Serial.print("Configured: ");
-        Serial.println(config->isConfigured ? "YES" : "NO");
         Serial.println("========================================");
 
-        // Matrix cells
-        Serial.print("Matrix Cells: ");
-        Serial.print(config->matrixCellCount);
-        Serial.println("/16");
+        // Cell count (LEDs)
+        Serial.print("LED Cells: ");
+        Serial.println(config->cellCount);
+
+        // Keys (show custom names if any)
+        Serial.print("Custom Key Names: ");
+        u8 customKeyCount = 0;
+        for (u8 i = 0; i < MAX_KEYS; i++)
+        {
+                if (config->keys[i].name != nullptr)
+                {
+                        customKeyCount++;
+                }
+        }
+        Serial.println(customKeyCount);
+        for (u8 i = 0; i < MAX_KEYS; i++)
+        {
+                if (config->keys[i].name != nullptr)
+                {
+                        Serial.print("  Key ");
+                        Serial.print(i);
+                        Serial.print(": ");
+                        Serial.println(config->keys[i].name);
+                }
+        }
 
         // Motors
         u8 motorCount = getMotorCount(deviceType);
@@ -319,30 +301,18 @@ void DeviceConfigurations::printConfig(u8 deviceType)
                 if (config->motors[i].name != nullptr)
                 {
                         Serial.print("  Motor ");
-                        Serial.print(i + 1);
+                        Serial.print(i);
                         Serial.print(": ");
                         Serial.println(config->motors[i].name);
-                }
-        }
-
-        // Switches
-        u8 switchCount = getSwitchCount(deviceType);
-        Serial.print("Switches: ");
-        Serial.println(switchCount);
-        for (u8 i = 0; i < MAX_SWITCHES; i++)
-        {
-                if (config->switches[i].name != nullptr)
-                {
-                        Serial.print("  Switch ");
-                        Serial.print(i + 1);
-                        Serial.print(": ");
-                        Serial.println(config->switches[i].name);
                 }
         }
 
         Serial.println("========================================\n");
 }
 
+/************************* printHardwareConfig *****************************
+ * Print concise hardware config with optional indent.
+ ***************************************************************/
 void DeviceConfigurations::printHardwareConfig(u8 deviceType, const char *indent)
 {
         if (deviceType >= MAX_DEVICE_TYPES)
@@ -360,10 +330,10 @@ void DeviceConfigurations::printHardwareConfig(u8 deviceType, const char *indent
                 return;
         }
 
-        // Matrix cells
+        // Cell count
         Serial.print(indent);
-        Serial.print("Matrix Cells:  ");
-        Serial.println(config->matrixCellCount);
+        Serial.print("LED Cells:     ");
+        Serial.println(config->cellCount);
 
         // Motors
         u8 motorCount = getMotorCount(deviceType);
@@ -384,22 +354,34 @@ void DeviceConfigurations::printHardwareConfig(u8 deviceType, const char *indent
                 }
         }
 
-        // Switches
-        u8 switchCount = getSwitchCount(deviceType);
-        Serial.print(indent);
-        Serial.print("Switches:      ");
-        Serial.println(switchCount);
-
-        for (u8 i = 0; i < MAX_SWITCHES; i++)
+        // Custom key names (if any)
+        u8 customKeyCount = 0;
+        for (u8 i = 0; i < MAX_KEYS; i++)
         {
-                const char *switchName = getSwitchName(deviceType, i);
-                if (switchName != nullptr)
+                const char *keyName = getKeyName(deviceType, i);
+                if (keyName != nullptr)
                 {
-                        Serial.print(indent);
-                        Serial.print("  Switch ");
-                        Serial.print(i);
-                        Serial.print(":    ");
-                        Serial.println(switchName);
+                        customKeyCount++;
+                }
+        }
+
+        if (customKeyCount > 0)
+        {
+                Serial.print(indent);
+                Serial.print("Custom Keys:   ");
+                Serial.println(customKeyCount);
+
+                for (u8 i = 0; i < MAX_KEYS; i++)
+                {
+                        const char *keyName = getKeyName(deviceType, i);
+                        if (keyName != nullptr)
+                        {
+                                Serial.print(indent);
+                                Serial.print("  Key ");
+                                Serial.print(i);
+                                Serial.print(":      ");
+                                Serial.println(keyName);
+                        }
                 }
         }
 }

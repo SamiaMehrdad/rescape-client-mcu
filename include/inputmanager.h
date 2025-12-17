@@ -25,11 +25,7 @@ enum InputEvent
         INPUT_KEYPAD_12,
         INPUT_KEYPAD_13,
         INPUT_KEYPAD_14,
-        INPUT_KEYPAD_15,
-        INPUT_SWITCH1_ON,
-        INPUT_SWITCH1_OFF,
-        INPUT_SWITCH2_ON,
-        INPUT_SWITCH2_OFF
+        INPUT_KEYPAD_15
 };
 
 // Callback function type for input events
@@ -54,11 +50,8 @@ public:
 private:
         IOExpander *m_ioExpander;
         InputCallback m_callback;
-        bool m_lastSwitch1;
-        bool m_lastSwitch2;
         bool m_btn1WasLongPress;
 
         void checkButtons();
         void checkKeypad();
-        void checkSwitches();
 };

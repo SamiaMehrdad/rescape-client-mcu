@@ -21,13 +21,19 @@ constexpr u8 FRAME_DIVISOR = ANIM_STEP_MS / ANIM_REFRESH_MS;
 // CONSTRUCTOR
 //============================================================================
 
+/************************* Animation constructor ****************************
+ * Construct the animation controller for a pixel strip.
+ ***************************************************************/
 Animation::Animation(PixelStrip *pixelStrip)
     : m_pixels(pixelStrip),
       m_active(false),
       m_type(ANIM_NONE),
       m_position(0),
       m_frameCounter(0),
-      m_stepDelay(FRAME_DIVISOR)
+      m_stepDelay(FRAME_DIVISOR),
+      m_currentBitmap(nullptr),
+      m_bitmapLoop(false),
+      m_lastFrameTime(0)
 {
 }
 
@@ -35,14 +41,22 @@ Animation::Animation(PixelStrip *pixelStrip)
 // PUBLIC METHODS
 //============================================================================
 
+/************************* init *******************************************
+ * Reset animation state and disable any running effect.
+ ***************************************************************/
 void Animation::init()
 {
         m_active = false;
         m_type = ANIM_NONE;
         m_position = 0;
         m_frameCounter = 0;
+        m_currentBitmap = nullptr;
 }
 
+/************************* start ******************************************
+ * Start a built-in animation type.
+ * @param type Animation type enum.
+ ***************************************************************/
 void Animation::start(AnimationType type)
 {
         m_type = type;
@@ -51,13 +65,46 @@ void Animation::start(AnimationType type)
         m_frameCounter = 0;
 }
 
-void Animation::stop()
+/************************* startBitmap ************************************
+ * Start a bitmap animation sequence.
+ * @param animData Pointer to bitmap frames.
+ * @param loop Whether to loop when finished.
+ ***************************************************************/
+void Animation::startBitmap(const BitmapAnimation *animData, bool loop)
+{
+        if (!animData || !animData->data)
+                return;
+
+        m_currentBitmap = animData;
+        m_bitmapLoop = loop;
+        m_type = ANIM_BITMAP;
+        m_active = true;
+        m_position = 0; // Current frame index
+        m_lastFrameTime = millis();
+
+        // Force immediate update of first frame
+        updateBitmap();
+        m_pixels->applyBuffer();
+}
+
+/************************* stop *******************************************
+ * Stop any running animation.
+ * @param clearPixels Optionally clear the strip.
+ ***************************************************************/
+void Animation::stop(bool clearPixels)
 {
         m_active = false;
         m_type = ANIM_NONE;
-        m_pixels->clear();
+        if (clearPixels)
+        {
+                m_pixels->clear();
+        }
 }
 
+/************************* refresh ****************************************
+ * Tick animations when the ISR flag is set.
+ * @param flag ISR-raised refresh flag (cleared here).
+ ***************************************************************/
 void Animation::refresh(volatile bool &flag)
 {
         if (flag)
@@ -67,6 +114,9 @@ void Animation::refresh(volatile bool &flag)
         }
 }
 
+/************************* update *****************************************
+ * Advance the current animation one frame.
+ ***************************************************************/
 void Animation::update()
 {
         if (!m_active || m_type == ANIM_NONE)
@@ -89,6 +139,9 @@ void Animation::update()
         case ANIM_SPARKLE:
                 updateSparkle();
                 break;
+        case ANIM_BITMAP:
+                updateBitmap();
+                break;
         default:
                 break;
         }
@@ -100,6 +153,63 @@ void Animation::update()
 // ANIMATION IMPLEMENTATIONS
 //============================================================================
 
+/************************* updateBitmap ***********************************
+ * Render the current bitmap frame and advance timing.
+ ***************************************************************/
+void Animation::updateBitmap()
+{
+        if (!m_currentBitmap)
+                return;
+
+        // Check timing
+        u32 now = millis();
+        u32 frameDelay = 1000 / m_currentBitmap->frameRate;
+
+        if (now - m_lastFrameTime < frameDelay && m_position > 0)
+        {
+                return; // Not time for next frame yet
+        }
+
+        // Update frame time
+        m_lastFrameTime = now;
+
+        // Calculate offset in data array
+        // Layout: [Frame0_LED0, Frame0_LED1, ... Frame1_LED0...]
+        u32 offset = (u32)m_position * m_currentBitmap->ledCount;
+
+        // Copy pixels
+        for (u16 i = 0; i < m_currentBitmap->ledCount; i++)
+        {
+                // Ensure we don't write past the strip length
+                if (i < m_pixels->getCount())
+                {
+                        m_pixels->setColor(i, m_currentBitmap->data[offset + i]);
+                }
+        }
+
+        // Advance frame
+        m_position++;
+        if (m_position >= m_currentBitmap->frameCount)
+        {
+                if (m_bitmapLoop)
+                {
+                        m_position = 0;
+                }
+                else
+                {
+                        // Stop at last frame or disable?
+                        // Usually one-shot means stop at end or turn off.
+                        // Let's hold the last frame.
+                        m_position = m_currentBitmap->frameCount - 1;
+                        // Optional: m_active = false; if we want to stop updating
+                }
+        }
+}
+//============================================================================
+
+/************************* updateRedDotChase *******************************
+ * Red dot chase with blue background.
+ ***************************************************************/
 void Animation::updateRedDotChase()
 {
         // Update position based on frame counter
@@ -129,6 +239,9 @@ void Animation::updateRedDotChase()
         }
 }
 
+/************************* updateRainbowCycle ******************************
+ * Rainbow cycling effect across the strip.
+ ***************************************************************/
 void Animation::updateRainbowCycle()
 {
         // Cycle through colors
@@ -150,6 +263,9 @@ void Animation::updateRainbowCycle()
         }
 }
 
+/************************* updateBreathing *******************************
+ * Simple breathing/pulse white effect.
+ ***************************************************************/
 void Animation::updateBreathing()
 {
         // Simple breathing effect using brightness modulation
@@ -169,6 +285,9 @@ void Animation::updateBreathing()
         m_pixels->setAll(color);
 }
 
+/************************* updateSparkle **********************************
+ * Random sparkle effect with single white pixel.
+ ***************************************************************/
 void Animation::updateSparkle()
 {
         // Random sparkle effect

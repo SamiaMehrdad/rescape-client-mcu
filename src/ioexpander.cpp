@@ -7,9 +7,9 @@
 
 #include "ioexpander.h"
 
-/**
- * Constructor
- */
+/************************* IOExpander constructor **************************
+ * Construct IOExpander with I2C address and Wire instance.
+ ***************************************************************/
 IOExpander::IOExpander(u8 address, TwoWire *wire)
     : _address(address), _outputState(0xFFFF) // All pins high by default (pull-ups)
       ,
@@ -18,11 +18,10 @@ IOExpander::IOExpander(u8 address, TwoWire *wire)
 {
 }
 
-/**
- * Initialize the I/O Expander
- * Note: Expects I2C bus to be initialized at 100 kHz (default Arduino Wire speed)
- * PCF8575 supports up to 400 kHz, but 100 kHz provides excellent reliability
- */
+/************************* begin *******************************************
+ * Initialize the I/O expander (expects Wire ready).
+ * PCF8575 supports up to 400 kHz; 100 kHz preferred for reliability.
+ ***************************************************************/
 bool IOExpander::begin()
 {
         // Set all pins high initially (keypad columns, motor off, switches as inputs)
@@ -48,9 +47,10 @@ bool IOExpander::begin()
         return true;
 }
 
-/**
- * Write to I/O Expander port
- */
+/************************* writePort ***************************************
+ * Write a 16-bit value to the expander port.
+ * @param value Bitmask for all pins.
+ ***************************************************************/
 bool IOExpander::writePort(u16 value)
 {
         _wire->beginTransmission(_address);
@@ -59,9 +59,10 @@ bool IOExpander::writePort(u16 value)
         return (_wire->endTransmission() == 0);
 }
 
-/**
- * Read from I/O Expander port
- */
+/************************* readPort ****************************************
+ * Read a 16-bit value from the expander port.
+ * @param value Out parameter for pin states.
+ ***************************************************************/
 bool IOExpander::readPort(u16 &value)
 {
         u8 bytesRead = _wire->requestFrom(_address, (u8)2);
@@ -78,9 +79,9 @@ bool IOExpander::readPort(u16 &value)
         return true;
 }
 
-/**
- * Set a single pin state
- */
+/************************* digitalWrite ************************************
+ * Set a single pin state (0-15).
+ ***************************************************************/
 void IOExpander::digitalWrite(u8 pin, u8 value)
 {
         if (pin > 15)
@@ -98,9 +99,9 @@ void IOExpander::digitalWrite(u8 pin, u8 value)
         writePort(_outputState);
 }
 
-/**
- * Read a single pin state
- */
+/************************* digitalRead *************************************
+ * Read a single pin state (0-15).
+ ***************************************************************/
 u8 IOExpander::digitalRead(u8 pin)
 {
         if (pin > 15)
@@ -115,18 +116,20 @@ u8 IOExpander::digitalRead(u8 pin)
         return (value & (1 << pin)) ? HIGH : LOW;
 }
 
-/**
- * Set all 16 pins at once
- */
+/************************* write ******************************************
+ * Set all 16 pins at once.
+ * @param value Bitmask for outputs.
+ ***************************************************************/
 void IOExpander::write(u16 value)
 {
         _outputState = value;
         writePort(_outputState);
 }
 
-/**
- * Read all 16 pins at once
- */
+/************************* read *******************************************
+ * Read all 16 pins at once.
+ * @return 16-bit port snapshot.
+ ***************************************************************/
 u16 IOExpander::read()
 {
         u16 value;
@@ -134,22 +137,14 @@ u16 IOExpander::read()
         return value;
 }
 
-/**
- * Scan keypad matrix for key presses with debouncing
- *
- * Keypad matrix scanning algorithm with debouncing:
- * 1. Rate limit scans to every 10ms for slower, more reliable operation
- * 2. Perform matrix scan (row-by-row column detection)
- * 3. Require 3 consecutive identical readings before accepting new key state
- * 4. Only report new key press when previous key was released (prevents repeat)
- *
- * Debouncing strategy:
- * - Scan rate: ~10ms (slower than typical bounce duration)
- * - Consecutive reads: 3 (total ~30ms settle time)
- * - State machine: Only trigger on press->release->press transitions
- *
- * @return Key index (0-15 for keys 0-15), or 255 if no key pressed
- */
+/************************* scanKeypad **************************************
+ * Scan keypad matrix with debouncing.
+ * 1) Rate limit to SCAN_RATE_MS.
+ * 2) Matrix scan row-by-row.
+ * 3) Require DEBOUNCE_COUNT stable reads.
+ * 4) Fire on release to avoid repeats.
+ * @return Key index 0-15, or 255 if none.
+ ***************************************************************/
 u8 IOExpander::scanKeypad()
 {
         // Rate limiting: Only scan every SCAN_RATE_MS
@@ -278,65 +273,14 @@ u8 IOExpander::scanKeypad()
         return 255; // No event to fire
 }
 
-/**
- * Get all keypad keys as a 16-bit bitmap
- * Each bit represents a key state (1 = pressed, 0 = released)
- */
-u16 IOExpander::getKeypadBitmap()
-{
-        u16 bitmap = 0;
+/************************* getKeypadBitmap ********************************
+ * Read keypad state as a 16-bit bitmap (1=pressed).
+ ***************************************************************/
+/* IOExpander::getKeypadBitmap removed (unused). */
 
-        // Set all columns HIGH (inactive) and all rows HIGH (ready to scan)
-        u16 baseState = _outputState;
-
-        // Set all keypad pins HIGH initially
-        for (u8 row = 0; row < KEYPAD_ROWS; row++)
-        {
-                baseState |= (1 << (KEYPAD_ROW_START + row));
-        }
-        for (u8 col = 0; col < KEYPAD_COLS; col++)
-        {
-                baseState |= (1 << (KEYPAD_COL_START + col));
-        }
-
-        // Scan each row
-        for (u8 row = 0; row < KEYPAD_ROWS; row++)
-        {
-                // Set current row LOW, others HIGH
-                u16 scanState = baseState;
-                scanState &= ~(1 << (KEYPAD_ROW_START + row)); // Current row LOW
-
-                writePort(scanState);
-                delayMicroseconds(10); // Allow signals to settle
-
-                // Read the port
-                u16 readValue;
-                if (!readPort(readValue))
-                {
-                        continue; // Skip on read error
-                }
-
-                // Check each column and set bitmap bits
-                for (u8 col = 0; col < KEYPAD_COLS; col++)
-                {
-                        u8 colPin = KEYPAD_COL_START + col;
-                        if ((readValue & (1 << colPin)) == 0)
-                        { // Column is LOW (key pressed)
-                                u8 keyIndex = row * KEYPAD_COLS + col;
-                                bitmap |= (1 << keyIndex); // Set bit for this key
-                        }
-                }
-        }
-
-        // Restore all rows HIGH
-        writePort(baseState);
-
-        return bitmap;
-}
-
-/**
- * Set motor A direction
- */
+/************************* setMotorA **************************************
+ * Control motor A direction/state.
+ ***************************************************************/
 void IOExpander::setMotorA(MotorDirection direction)
 {
         u16 state = _outputState;
@@ -365,9 +309,9 @@ void IOExpander::setMotorA(MotorDirection direction)
         writePort(_outputState);
 }
 
-/**
- * Set motor B direction
- */
+/************************* setMotorB **************************************
+ * Control motor B direction/state.
+ ***************************************************************/
 void IOExpander::setMotorB(MotorDirection direction)
 {
         u16 state = _outputState;
@@ -396,43 +340,75 @@ void IOExpander::setMotorB(MotorDirection direction)
         writePort(_outputState);
 }
 
-/**
- * Stop all motors
- */
+/************************* stopAllMotors **********************************
+ * Stop/brake all configured motors.
+ ***************************************************************/
 void IOExpander::stopAllMotors()
 {
         setMotorA(MOTOR_STOP);
         setMotorB(MOTOR_STOP);
+        setMotorC(MOTOR_STOP);
+        setMotorD(MOTOR_STOP);
 }
 
-/**
- * Read switch 1 state
- */
-bool IOExpander::readSwitch1()
+/************************* setMotorC **************************************
+ * Control motor C direction/state.
+ ***************************************************************/
+void IOExpander::setMotorC(MotorDirection direction)
 {
-        return digitalRead(SW_1) == HIGH;
+        u16 state = _outputState;
+
+        // Clear motor C bits
+        state &= ~((1 << MOT3A) | (1 << MOT3B));
+
+        switch (direction)
+        {
+        case MOTOR_FORWARD:
+                state |= (1 << MOT3A); // IN1=HIGH, IN2=LOW
+                break;
+        case MOTOR_REVERSE:
+                state |= (1 << MOT3B); // IN1=LOW, IN2=HIGH
+                break;
+        case MOTOR_BRAKE:
+                state |= (1 << MOT3A) | (1 << MOT3B); // Both HIGH
+                break;
+        case MOTOR_STOP:
+        default:
+                // Both LOW (already cleared)
+                break;
+        }
+
+        _outputState = state;
+        writePort(_outputState);
 }
 
-/**
- * Read switch 2 state
- */
-bool IOExpander::readSwitch2()
+/************************* setMotorD **************************************
+ * Control motor D direction/state.
+ ***************************************************************/
+void IOExpander::setMotorD(MotorDirection direction)
 {
-        return digitalRead(SW_2) == HIGH;
-}
+        u16 state = _outputState;
 
-/**
- * Read switch 3 state
- */
-bool IOExpander::readSwitch3()
-{
-        return digitalRead(SW_3) == HIGH;
-}
+        // Clear motor D bits
+        state &= ~((1 << MOT4A) | (1 << MOT4B));
 
-/**
- * Read switch 4 state
- */
-bool IOExpander::readSwitch4()
-{
-        return digitalRead(SW_4) == HIGH;
+        switch (direction)
+        {
+        case MOTOR_FORWARD:
+                state |= (1 << MOT4A); // IN1=HIGH, IN2=LOW
+                break;
+        case MOTOR_REVERSE:
+                state |= (1 << MOT4B); // IN1=LOW, IN2=HIGH
+                break;
+        case MOTOR_BRAKE:
+                state |= (1 << MOT4A) | (1 << MOT4B); // Both HIGH
+                break;
+        case MOTOR_STOP:
+        default:
+                // Both LOW (already cleared)
+                break;
+        }
+
+        _outputState = state;
+        writePort(_outputState);
 }

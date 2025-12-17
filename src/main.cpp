@@ -26,6 +26,7 @@
 #include "animation.h"
 #include "inputmanager.h"
 #include "core.h"
+#include "test_animation.h"
 
 //============================================================================
 // SYSTEM CONFIGURATION
@@ -47,7 +48,7 @@ volatile bool pixelUpdateFlag = false;
 Synth synth(SPKR_PIN, AUDIO_PWM_CHANNEL);
 
 // PixelStrip(pin, logicalCount, groupSize, brightness)
-PixelStrip pixels(PIXEL_PIN, 16, 1, 5);
+PixelStrip pixels(PIXEL_PIN, 16, 1, PIXEL_BRIGHTNESS);
 
 // RS-485 communication for Room Bus
 RoomSerial roomBus(RX_PIN, TX_PIN, -1, 9600);
@@ -55,22 +56,22 @@ RoomSerial roomBus(RX_PIN, TX_PIN, -1, 9600);
 // I/O Expander (keypad, motors, switches)
 IOExpander ioExpander(IO_EXPANDER_I2C_ADDR, &Wire);
 
-// Hardware timer
-hw_timer_t *timer = nullptr;
-
 //============================================================================
 // CORE FIRMWARE MODULES
 //============================================================================
 
 Animation animation(&pixels);
 InputManager inputManager(&ioExpander);
-Core core(&pixels, &synth, &animation, &inputManager, &roomBus);
+Core core(&pixels, &synth, &animation, &inputManager, &roomBus, &ioExpander);
 
 //============================================================================
 // ISR AND SYSTEM FUNCTIONS
 //============================================================================
 
 // Timer ISR: refresh button logic and trigger pixel updates
+/************************* refreshTimer ***********************************
+ * ISR: refresh button logic and trigger pixel updates on schedule.
+ ***************************************************************/
 void IRAM_ATTR refreshTimer()
 {
   static u8 animDelay = 0;
@@ -85,16 +86,24 @@ void IRAM_ATTR refreshTimer()
 //============================================================================
 // ARDUINO SETUP
 //============================================================================
+/************************* setup ******************************************
+ * Arduino setup: initialize core and start test animation.
+ ***************************************************************/
 void setup()
 {
-  // All system initialization delegated to Core::systemInit()
-  Core::systemInit(&pixels, &synth, &animation, &inputManager, &roomBus,
-                   &core, &ioExpander, &timer);
+  // Initialize system via Core
+  core.begin();
+
+  // Start test animation
+  animation.startBitmap(&kColorTestAnimation, true);
 }
 
 //============================================================================
 // ARDUINO MAIN LOOP
 //============================================================================
+/************************* loop *******************************************
+ * Arduino main loop: watchdog feed, animation refresh, core update.
+ ***************************************************************/
 void loop()
 {
   // Feed the watchdog

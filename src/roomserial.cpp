@@ -14,6 +14,9 @@
 // Initial value: 0xFFFF
 // No final XOR
 //
+/************************* calcCrc *****************************************
+ * Compute CRC16-CCITT over a buffer.
+ ***************************************************************/
 uint16_t calcCrc(const uint8_t *data, size_t length)
 {
         uint16_t crc = 0xFFFF;
@@ -35,6 +38,9 @@ uint16_t calcCrc(const uint8_t *data, size_t length)
 
 // ---------- Encoder ----------
 
+/************************* encodeFrame ************************************
+ * Encode a RoomFrame into a byte buffer with CRC and markers.
+ ***************************************************************/
 size_t encodeFrame(const RoomFrame *f, uint8_t *outBuf, size_t outBufSize)
 {
         if (!f || !outBuf)
@@ -86,6 +92,9 @@ size_t encodeFrame(const RoomFrame *f, uint8_t *outBuf, size_t outBufSize)
 
 // ---------- Parser ----------
 
+/************************* parserInit *************************************
+ * Initialize parser state machine.
+ ***************************************************************/
 void parserInit(RoomBusParser *parser)
 {
         if (!parser)
@@ -112,6 +121,9 @@ void parserInit(RoomBusParser *parser)
  *   if ok and CRC matches -> unpack into RoomFrame and return 1
  *   else reset to WAIT_START
  */
+/************************* parserFeed *************************************
+ * Feed one byte into parser; return 1 when a frame is ready.
+ ***************************************************************/
 int parserFeed(RoomBusParser *parser, uint8_t byte, RoomFrame *out)
 {
         if (!parser || !out)
@@ -188,6 +200,9 @@ int parserFeed(RoomBusParser *parser, uint8_t byte, RoomFrame *out)
 
 #ifdef __cplusplus
 
+/************************* RoomSerial constructor **************************
+ * Construct RS-485 wrapper with UART1 pins and baud.
+ ***************************************************************/
 RoomSerial::RoomSerial(int rxPin, int txPin, int dePin, unsigned long baudRate)
     : serial(1), // Use UART1
       rxPin(rxPin),
@@ -198,6 +213,9 @@ RoomSerial::RoomSerial(int rxPin, int txPin, int dePin, unsigned long baudRate)
         parserInit(&parser);
 }
 
+/************************* begin *******************************************
+ * Initialize UART and DE pin for RS-485.
+ ***************************************************************/
 void RoomSerial::begin()
 {
         // Initialize UART1 with specified pins
@@ -213,6 +231,9 @@ void RoomSerial::begin()
         parserInit(&parser);
 }
 
+/************************* enableTransmit *********************************
+ * Set transceiver to transmit mode (DE high).
+ ***************************************************************/
 void RoomSerial::enableTransmit()
 {
         if (dePin >= 0)
@@ -222,6 +243,9 @@ void RoomSerial::enableTransmit()
         }
 }
 
+/************************* enableReceive **********************************
+ * Set transceiver to receive mode (DE low).
+ ***************************************************************/
 void RoomSerial::enableReceive()
 {
         if (dePin >= 0)
@@ -230,6 +254,9 @@ void RoomSerial::enableReceive()
         }
 }
 
+/************************* sendFrame **************************************
+ * Encode and transmit a RoomFrame over UART.
+ ***************************************************************/
 bool RoomSerial::sendFrame(const RoomFrame *frame)
 {
         if (!frame)
@@ -255,6 +282,9 @@ bool RoomSerial::sendFrame(const RoomFrame *frame)
         return (written == len);
 }
 
+/************************* receiveFrame ***********************************
+ * Poll UART and parse bytes; return true when a frame is decoded.
+ ***************************************************************/
 bool RoomSerial::receiveFrame(RoomFrame *frame)
 {
         if (!frame)

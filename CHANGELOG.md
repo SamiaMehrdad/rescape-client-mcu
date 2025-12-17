@@ -17,6 +17,46 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 ---
 
+## December 16, 2025 - Protocol Synchronization & Cleanup
+
+### 🔄 Protocol Alignment & Code Cleanup
+
+**Status:** ✅ Complete
+
+**Summary:** Synchronized the Room Bus protocol definitions between firmware (C++) and server (TypeScript), cleaned up unused code, and improved test mode behavior.
+
+**Changes:**
+
+1.  **Protocol Synchronization**
+
+    -   Updated `roomBus.ts` to match `roombus.h` definitions (24-byte frame, command IDs).
+    -   Aligned command ranges: Server (0x40-0x7F), Event (0x80-0xFF).
+    -   Documented the "Address + Command" dispatch model in `roombus.h`.
+
+2.  **Code Cleanup**
+
+    -   Removed unused functions: `getKeypadBitmap`, `getCellCount`, and unused `ESPTimer` helpers.
+    -   Updated `RS485_USAGE.md` to reflect current command ranges.
+
+3.  **Behavior Improvements**
+    -   Updated `enterKeypadTestMode` in `core.cpp` to stop any running animations and clear pixels before starting the test.
+
+---
+
+## December 15, 2025 - Core device type guidance
+
+### 📝 Added inline guidance for device types
+
+**Status:** ✅ Complete
+
+**Summary:** Added a maintenance note near the core type limits to remind developers where to register new device types and when to bump the potentiometer mapping limit.
+
+**Changes:**
+
+-   Added instruction comment near `TypeLimits` in `src/core.cpp` covering `DEVICE_TYPE_LIST`, `kConfigs`, and `MAX_CURRENT_TYPE` updates when exposing IDs above 31.
+
+---
+
 ## December 9, 2025 - Device Configuration System (X-Macro Pattern)
 
 ### 🎯 Centralized Hardware Configuration with Single Source of Truth
@@ -28,48 +68,55 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 **Changes:**
 
 1. **X-Macro Pattern for Device Types**
-   - Single `DEVICE_TYPE_LIST` macro defines all device types once
-   - Automatically generates both `DeviceType` enum and `DEVICE_TYPE_NAMES` array
-   - Eliminates duplication between enum values and display names
-   - Easy maintenance: add new device by editing one line
+
+    - Single `DEVICE_TYPE_LIST` macro defines all device types once
+    - Automatically generates both `DeviceType` enum and `DEVICE_TYPE_NAMES` array
+    - Eliminates duplication between enum values and display names
+    - Easy maintenance: add new device by editing one line
 
 2. **Device Configuration Database**
-   - `DeviceConfig` struct defines hardware per device type:
-     - Matrix cell count (0-16)
-     - Motor names (0-2 motors)
-     - Switch names (0-4 switches)
-   - 14 device types fully configured (Terminal, GlowButton, NumBox, Timer, GlowDots, QB, RGBMixer, Bomb, FinalOrder, BallGate, Actuator, TheWall, Scores, BallBase)
-   - 50 placeholder types (TYPE_14 through TYPE_63) for future expansion
+
+    - `DeviceConfig` struct defines hardware per device type:
+        - Matrix cell count (0-16)
+        - Motor names (0-2 motors)
+        - Switch names (0-4 switches)
+    - 14 device types fully configured (Terminal, GlowButton, NumBox, Timer, GlowDots, QB, RGBMixer, Bomb, FinalOrder, BallGate, Actuator, TheWall, Scores, BallBase)
+    - 50 placeholder types (TYPE_14 through TYPE_63) for future expansion
 
 3. **Hardware Config Display**
-   - Added `DeviceConfigurations::printHardwareConfig()` function
-   - Integrated into boot report showing device's motors, switches, matrix cells
-   - Real-time config display during device type calibration
-   - Helps verify correct hardware assignment when changing device types
+
+    - Added `DeviceConfigurations::printHardwareConfig()` function
+    - Integrated into boot report showing device's motors, switches, matrix cells
+    - Real-time config display during device type calibration
+    - Helps verify correct hardware assignment when changing device types
 
 4. **Core Integration**
-   - Boot report now shows hardware configuration for current device type
-   - Device type calibration mode displays hardware config as you turn potentiometer
-   - Immediate visual feedback of what hardware each device type uses
+    - Boot report now shows hardware configuration for current device type
+    - Device type calibration mode displays hardware config as you turn potentiometer
+    - Immediate visual feedback of what hardware each device type uses
 
 **Benefits:**
-- ✅ **Single source of truth** - Device types defined once, used everywhere
-- ✅ **No recompilation needed** - All 64 types compiled in, selected at runtime
-- ✅ **Easy maintenance** - Add new device by editing one macro entry
-- ✅ **Type-safe** - Proper `enum DeviceType : u8` with compiler checks
-- ✅ **Scalable** - Supports 64 device types (6-bit addressing)
-- ✅ **Self-documenting** - Hardware config visible in serial monitor
+
+-   ✅ **Single source of truth** - Device types defined once, used everywhere
+-   ✅ **No recompilation needed** - All 64 types compiled in, selected at runtime
+-   ✅ **Easy maintenance** - Add new device by editing one macro entry
+-   ✅ **Type-safe** - Proper `enum DeviceType : u8` with compiler checks
+-   ✅ **Scalable** - Supports 64 device types (6-bit addressing)
+-   ✅ **Self-documenting** - Hardware config visible in serial monitor
 
 **Files Created:**
-- `include/deviceconfig.h` - X-Macro definitions, DeviceType enum, DeviceConfig struct
-- `src/deviceconfig.cpp` - Configuration database for all 64 types
-- `DEVICE_CONFIGURATION.md` - System documentation
+
+-   `include/deviceconfig.h` - X-Macro definitions, DeviceType enum, DeviceConfig struct
+-   `src/deviceconfig.cpp` - Configuration database for all 64 types
+-   `DEVICE_CONFIGURATION.md` - System documentation
 
 **Files Modified:**
-- `src/core.cpp` - Added hardware config display to boot report and calibration
-- Updated boot report format with hardware configuration section
+
+-   `src/core.cpp` - Added hardware config display to boot report and calibration
+-   Updated boot report format with hardware configuration section
 
 **Example Output:**
+
 ```
 ┌─ DEVICE CONFIGURATION ─────────────────────────────────────┐
 │ Device Type:       QB (Index: 5)
@@ -983,8 +1030,7 @@ if (checkReading < 30)  // Well below TYPE_00 range (0-63)
 **Changes:**
 
 -   Renamed from `PCF8575` to `IOExpander` for generic naming
--   Changed API to return key index (0-15) instead of character
--   Added `getKeypadBitmap()` for multi-key detection
+-   Changed API to return key index (0-15) instead of character -- getKeypadBitmap() removed from API (was docs-only use)
 -   Renamed motor pins: `MOTOR_A/B_IN1/IN2` → `MOT1A/MOT1B/MOT2A/MOT2B`
 -   Renamed sensor pins: `SENSOR_1-4` → `SW_1-4`
 -   Added `readSwitch3()` and `readSwitch4()` methods
@@ -1089,10 +1135,7 @@ buffer[0] = CLR_RD;  // Modify buffer
 hw_timer_t *timer = ESPTimer::begin(0, 10, &callback);  // Timer 0, 10ms, auto-reload
 
 // Control
-ESPTimer::stop(timer);           // Pause
-ESPTimer::start(timer);          // Resume
-ESPTimer::setInterval(timer, 20); // Change to 20ms
-ESPTimer::end(timer);            // Stop and free
+ESPTimer::end(timer);            // Stop and free (other control APIs removed)
 
 // Microsecond precision
 timer = ESPTimer::beginMicros(1, 500, &callback);  // 500μs

@@ -12,6 +12,7 @@
 #include "matrixpanel.h"
 #include <Preferences.h>
 
+#define PIXEL_BRIGHTNESS 5
 // Core firmware modes
 enum CoreMode
 {
@@ -32,9 +33,10 @@ struct LedPattern
 // Status LED modes
 enum StatusLedMode
 {
-        STATUS_OK,        // Long ON (3000ms ON, 100ms OFF) - Normal operation
-        STATUS_I2C_ERROR, // Fast blink (100ms ON, 100ms OFF) - I2C communication error
-        STATUS_TYPE_ERROR // Slow blink (500ms ON, 500ms OFF) - Invalid device type
+        STATUS_OK,              // Long ON (3000ms ON, 100ms OFF) - Normal operation
+        STATUS_I2C_ERROR,       // Fast blink (100ms ON, 100ms OFF) - I2C communication error
+        STATUS_TYPE_ERROR,      // Slow blink (500ms ON, 500ms OFF) - Invalid device type
+        STATUS_DEVICE_DETECTION // Detection blink (100ms ON, 400ms OFF) - Device detection mode
 };
 
 class Core
@@ -42,14 +44,12 @@ class Core
 public:
         // Constructor
         Core(PixelStrip *pixels, Synth *synth, Animation *animation,
-             InputManager *inputManager, RoomSerial *roomBus);
+             InputManager *inputManager, RoomSerial *roomBus, IOExpander *ioExpander);
 
         // System-wide initialization (call once from setup())
-        static void systemInit(PixelStrip *pixels, Synth *synth, Animation *animation,
-                               InputManager *inputManager, RoomSerial *roomBus,
-                               Core *core, IOExpander *ioExpander, hw_timer_t **timer);
+        void begin();
 
-        // Initialize core firmware
+        // Initialize core firmware logic (called by begin, or for soft reset)
         void init();
 
         // Main core update loop
@@ -94,6 +94,7 @@ private:
         Animation *m_animation;
         InputManager *m_inputManager;
         RoomSerial *m_roomBus;
+        IOExpander *m_ioExpander;
         MatrixPanel *m_matrixPanel; // Keypad+LED matrix abstraction
 
         // Core state
@@ -110,16 +111,12 @@ private:
 
         // Status LED state
         StatusLedMode m_statusLedMode;
+        StatusLedMode m_previousStatusLedMode; // To restore after detection mode
         u32 m_lastLedToggle;
         bool m_ledState;
 
         // LED patterns for different modes
-        static const LedPattern LED_PATTERN_OK;
-        static const LedPattern LED_PATTERN_I2C_ERROR;
-        static const LedPattern LED_PATTERN_TYPE_ERROR;
-
-        // Get pattern for current mode
-        const LedPattern &getCurrentLedPattern() const;
+        static const LedPattern kLedPatterns[];
 
         // Type detection mode state
         CoreMode m_previousMode;    // Mode to return to after type detection
@@ -131,11 +128,6 @@ private:
         // Color palette - defined in core.cpp
         static const u32 kColors[];
         static const size_t kColorCount;
-
-        // Device type names (0-63) - defined in core.cpp
-        // Placeholder names for firmware level. High-level App can override.
-        // Currently using 0-31, expandable to 64 types in future
-        static const char *kDeviceTypeNames[64];
 
         // MIDI note mapping for keypad - defined in core.cpp
         static const int kNoteMap[16];

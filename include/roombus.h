@@ -15,35 +15,18 @@
 #define ADDR_BROADCAST 0xFE
 #define ADDR_UNASSIGNED 0x00 // factory / pairing mode
 // ---------- Command ranges ----------
-#define CMD_CORE_MIN 0x01
-#define CMD_CORE_MAX 0x1F
+#define CORE_MIN 0x01
+#define CORE_MAX 0x3F
 
-#define CMD_SERVER_MIN 0x20 // server→device only
-#define CMD_SERVER_MAX 0x7F
+#define SERVER_MIN 0x40 // server→device only
+#define SERVER_MAX 0x7F
 
-#define CMD_EVENT_MIN 0x80 // device→server only
-#define CMD_EVENT_MAX 0xFF
+#define EVENT_MIN 0x80 // device→server only
+#define EVENT_MAX 0xFF
 
 // ---------- Device types ----------
-typedef enum
-{
-    D_GLOWBTN = 0x01,
-    D_NUMBOX = 0x02,
-    D_GLOWDOTS = 0x03,
-    D_TIMER = 0x04,
-    D_QB = 0x05,
-    D_TERMINAL = 0x06,
-    D_RGBMIXER = 0x07,
-    D_BOMB = 0x08,
-    D_SCREEN = 0x09,
-    D_ACTUATOR = 0x0A,
-    D_GLOWBALL = 0x0B,
-    D_GLOWGATE = 0x0C,
-    D_WALL = 0x0D,
-    D_FINALORDER = 0x0E,
-    D_INCENTIVES = 0x0F,
-    D_PUZZLE = 0x10,
-} RoomDeviceType;
+// Device IDs are defined once in DEVICE_TYPE_LIST (see deviceconfig.h).
+// Use DeviceType from that header instead of a duplicate enum here to avoid drift.
 
 // ---------- Core ops (0x01–0x1F) ----------
 typedef struct
@@ -55,61 +38,74 @@ typedef struct
     u8 reserved; // future flags / seq / etc.
 } RoomFrame;
 
-// ---------- Server→device commands (0x20–0x7F) ----------
+// ---------- Server→device command ----------
+// NOTE: Commands in the server→device range are interpreted by the receiving
+// device type. The `cmd_srv` value alone is NOT globally unique — the
+// destination `addr` (device ID) + `cmd_srv` together determine the concrete
+// action. This allows multiple device types to reuse the same numeric command
+// slots (e.g., 0x40, 0x41, ...) while keeping the wire protocol compact.
 typedef enum
 {
+    // Core (common across all devices; 0x01-0x3F)
+    CORE_HELLO = 0x01, // device announces presence
+    CORE_ACK = 0x02,   // ack for reliability/simple handshake
+    CORE_PING = 0x03,  // liveness check
+    CORE_RESET = 0x04, // soft reset/restart
+
+    // Device-specific commands start at 0x40
+
     // Glow Button
-    CMD_GLOW_SET_COLOR = 0x20,
+    GLOW_SET_COLOR = 0x40,
 
     // Num Box
-    CMD_NUM_SET_DIGIT_COLOR = 0x21,
-    CMD_NUM_SET_DIGIT_VAL = 0x22,
-    CMD_NUM_SET_ROW_NUM = 0x23,
+    NUM_SET_DIGIT_COLOR = 0x40,
+    NUM_SET_DIGIT_VAL = 0x41,
+    NUM_SET_ROW_NUM = 0x42,
 
     // Glow Dots
-    CMD_DOTS_SET_COLORS = 0x24,
-    CMD_DOTS_SET_MOVE = 0x25,
-    CMD_DOTS_SET_DELAY = 0x26,
-    CMD_DOTS_SET_LED = 0x27,
+    DOTS_SET_COLORS = 0x40,
+    DOTS_SET_MOVE = 0x41,
+    DOTS_SET_DELAY = 0x42,
+    DOTS_SET_LED = 0x43,
 
     // Timer
-    CMD_TMR_SET_COLOR = 0x28,
-    CMD_TMR_SET_VALUE = 0x29,
-    CMD_TMR_START = 0x2A,
-    CMD_TMR_PAUSE = 0x2B,
+    TMR_SET_COLOR = 0x40,
+    TMR_SET_VALUE = 0x41,
+    TMR_START = 0x42,
+    TMR_PAUSE = 0x43,
 
     // QB
-    CMD_QB_SET_COLORS = 0x2C,
-    CMD_QB_SET_MODES = 0x2D,
+    QB_SET_COLORS = 0x40,
+    QB_SET_MODES = 0x41,
 
     // Terminal
-    CMD_TERM_RESET = 0x2E,
+    TERM_RESET = 0x40,
 
     // Bomb
-    CMD_BOMB_SET_STATE = 0x30,
+    BOMB_SET_STATE = 0x40,
 
     // Screen
-    CMD_SCR_LOAD = 0x31,
-    CMD_SCR_SHOW = 0x32,
-    CMD_SCR_OFF = 0x33,
+    SCR_LOAD = 0x40,
+    SCR_SHOW = 0x41,
+    SCR_OFF = 0x42,
 
     // Actuator
-    CMD_ACT_OPEN = 0x34,
-    CMD_ACT_CLOSE = 0x35,
+    ACT_OPEN = 0x40,
+    ACT_CLOSE = 0x41,
 
     // Glow Ball
-    CMD_BALL_ACTIVATE = 0x36,
+    BALL_ACTIVATE = 0x40,
 
     // Final Order
-    CMD_FINAL_RESET = 0x37,
+    FINAL_RESET = 0x40,
 
     // Incentives
-    CMD_INC_SET_VALUE = 0x38,
-    CMD_INC_SET_EFFECT = 0x39,
-    CMD_INC_SET_MODE = 0x3A,
+    INC_SET_VALUE = 0x40,
+    INC_SET_EFFECT = 0x41,
+    INC_SET_MODE = 0x42,
 
     // Puzzle
-    CMD_PUZZLE_RESET = 0x3B,
+    PUZZLE_RESET = 0x40,
 
 } RoomServerCommand;
 

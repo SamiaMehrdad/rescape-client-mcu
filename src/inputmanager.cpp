@@ -11,11 +11,12 @@
 // CONSTRUCTOR
 //============================================================================
 
+/************************* InputManager constructor ************************
+ * Construct with IOExpander dependency.
+ ***************************************************************/
 InputManager::InputManager(IOExpander *ioExpander)
     : m_ioExpander(ioExpander),
       m_callback(nullptr),
-      m_lastSwitch1(false),
-      m_lastSwitch2(false),
       m_btn1WasLongPress(false)
 {
 }
@@ -24,17 +25,17 @@ InputManager::InputManager(IOExpander *ioExpander)
 // PUBLIC METHODS
 //============================================================================
 
+/************************* init *******************************************
+ * Initialize internal input state.
+ ***************************************************************/
 void InputManager::init()
 {
-        if (m_ioExpander->isPresent())
-        {
-                m_lastSwitch1 = m_ioExpander->readSwitch1();
-                m_lastSwitch2 = m_ioExpander->readSwitch2();
-        }
-
         m_btn1WasLongPress = false;
 }
 
+/************************* poll *******************************************
+ * Poll buttons and keypad (if present) and dispatch events.
+ ***************************************************************/
 void InputManager::poll()
 {
         // Always check buttons (no I2C needed)
@@ -44,15 +45,20 @@ void InputManager::poll()
         if (m_ioExpander->isPresent())
         {
                 checkKeypad();
-                checkSwitches();
         }
 }
 
+/************************* setCallback ************************************
+ * Register input event callback.
+ ***************************************************************/
 void InputManager::setCallback(InputCallback callback)
 {
         m_callback = callback;
 }
 
+/************************* getKeypadNote **********************************
+ * Map keypad event enum to note index (0-15).
+ ***************************************************************/
 u8 InputManager::getKeypadNote(InputEvent event) const
 {
         if (event >= INPUT_KEYPAD_0 && event <= INPUT_KEYPAD_15)
@@ -66,6 +72,9 @@ u8 InputManager::getKeypadNote(InputEvent event) const
 // INPUT POLLING METHODS
 //============================================================================
 
+/************************* checkButtons ***********************************
+ * Poll BTN1 for short/long presses and fire callbacks.
+ ***************************************************************/
 void InputManager::checkButtons()
 {
         // Check for long presses first
@@ -88,6 +97,9 @@ void InputManager::checkButtons()
         }
 }
 
+/************************* checkKeypad ************************************
+ * Scan keypad via IOExpander and fire events.
+ ***************************************************************/
 void InputManager::checkKeypad()
 {
         u8 keyIndex = m_ioExpander->scanKeypad();
@@ -96,25 +108,5 @@ void InputManager::checkKeypad()
                 InputEvent event = static_cast<InputEvent>(INPUT_KEYPAD_0 + keyIndex);
                 if (m_callback)
                         m_callback(event);
-        }
-}
-
-void InputManager::checkSwitches()
-{
-        bool switch1 = m_ioExpander->readSwitch1();
-        bool switch2 = m_ioExpander->readSwitch2();
-
-        if (switch1 != m_lastSwitch1)
-        {
-                m_lastSwitch1 = switch1;
-                if (m_callback)
-                        m_callback(switch1 ? INPUT_SWITCH1_ON : INPUT_SWITCH1_OFF);
-        }
-
-        if (switch2 != m_lastSwitch2)
-        {
-                m_lastSwitch2 = switch2;
-                if (m_callback)
-                        m_callback(switch2 ? INPUT_SWITCH2_ON : INPUT_SWITCH2_OFF);
         }
 }

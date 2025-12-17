@@ -8,17 +8,25 @@
 // Static member initialization
 hw_timer_t *ESPTimer::timers[MAX_TIMERS] = {nullptr};
 
-/**
- * Initialize a hardware timer with millisecond interval
- */
+/************************* begin *******************************************
+ * Initialize a hardware timer with millisecond interval.
+ * @param timerNum Hardware timer index (0..MAX_TIMERS-1).
+ * @param intervalMs Interval in milliseconds.
+ * @param callback ISR callback.
+ * @param autoReload Whether to auto-reload.
+ ***************************************************************/
 hw_timer_t *ESPTimer::begin(u8 timerNum, u16 intervalMs, TimerCallback callback, bool autoReload)
 {
         return beginMicros(timerNum, (u32)intervalMs * 1000, callback, autoReload);
 }
 
-/**
- * Initialize a hardware timer with microsecond interval
- */
+/************************* beginMicros *************************************
+ * Initialize a hardware timer with microsecond interval.
+ * @param timerNum Hardware timer index (0..MAX_TIMERS-1).
+ * @param intervalUs Interval in microseconds.
+ * @param callback ISR callback.
+ * @param autoReload Whether to auto-reload.
+ ***************************************************************/
 hw_timer_t *ESPTimer::beginMicros(u8 timerNum, u32 intervalUs, TimerCallback callback, bool autoReload)
 {
         if (timerNum >= MAX_TIMERS || callback == nullptr)
@@ -54,9 +62,10 @@ hw_timer_t *ESPTimer::beginMicros(u8 timerNum, u32 intervalUs, TimerCallback cal
         return timers[timerNum];
 }
 
-/**
- * Stop and detach a timer
- */
+/************************* end ********************************************
+ * Stop and detach a timer.
+ * @param timer Timer handle.
+ ***************************************************************/
 void ESPTimer::end(hw_timer_t *timer)
 {
         if (timer == nullptr)
@@ -84,64 +93,14 @@ void ESPTimer::end(hw_timer_t *timer)
         }
 }
 
-/**
- * Change timer interval in milliseconds
- */
-void ESPTimer::setInterval(hw_timer_t *timer, u16 intervalMs)
-{
-        setIntervalMicros(timer, (u32)intervalMs * 1000);
-}
+/************************* setInterval *************************************
+ * Change timer interval in milliseconds.
+ ***************************************************************/
+/* setInterval / setIntervalMicros / start / stop removed (unused). */
 
-/**
- * Change timer interval in microseconds
- */
-void ESPTimer::setIntervalMicros(hw_timer_t *timer, u32 intervalUs)
-{
-        if (timer == nullptr)
-        {
-                return;
-        }
-
-        // Disable alarm
-        timerAlarmDisable(timer);
-
-        // Write new alarm value (auto-reload preserved)
-        timerWrite(timer, 0); // Reset counter
-        timerAlarmWrite(timer, intervalUs, true);
-
-        // Re-enable alarm
-        timerAlarmEnable(timer);
-}
-
-/**
- * Start/resume a timer
- */
-void ESPTimer::start(hw_timer_t *timer)
-{
-        if (timer == nullptr)
-        {
-                return;
-        }
-
-        timerAlarmEnable(timer);
-}
-
-/**
- * Stop/pause a timer
- */
-void ESPTimer::stop(hw_timer_t *timer)
-{
-        if (timer == nullptr)
-        {
-                return;
-        }
-
-        timerAlarmDisable(timer);
-}
-
-/**
- * Get prescaler for 1 MHz tick rate
- */
+/************************* getPrescaler ***********************************
+ * Get prescaler value for 1 MHz tick rate.
+ ***************************************************************/
 u8 ESPTimer::getPrescaler()
 {
         // ESP32 classic runs at 80 MHz, needs prescaler of 80 for 1 μs ticks

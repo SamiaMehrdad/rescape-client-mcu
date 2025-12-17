@@ -39,6 +39,8 @@ namespace ADCConfig
         constexpr int SAMPLE_DELAY_US = 100;     // Delay between ADC samples (microseconds)
 }
 
+// Instruction: add new device types in DEVICE_TYPE_LIST and kConfigs (deviceconfig.*);
+// bump MAX_CURRENT_TYPE if you want the potentiometer map to expose IDs above 31.
 // Device type limits
 namespace TypeLimits
 {
@@ -76,47 +78,25 @@ const int Core::kNoteMap[16] = {
     NOTE_A5, NOTE_B5, NOTE_C6, NOTE_D6};
 
 // LED patterns for status indication
-// These are placeholder names at the Core firmware level.
-// High-level App code should implement its own type name mapping
-// for application-specific device types.
-// Types 32-63 reserved for future expansion
-const char *Core::kDeviceTypeNames[64] = {
-    // Currently used types (0-31)
-    "Terminal", "GlowButton", "NumBox", "Timer",
-    "GlowDots", "QB", "RGBMixer", "Bomb",
-    "FinalOrder", "BallGate", "Actuator", "TheWall",
-    "Scores", "BallBase", "TYPE_14", "TYPE_15",
-    "TYPE_16", "TYPE_17", "TYPE_18", "TYPE_19",
-    "TYPE_20", "TYPE_21", "TYPE_22", "TYPE_23",
-    "TYPE_24", "TYPE_25", "TYPE_26", "TYPE_27",
-    "TYPE_28", "TYPE_29", "TYPE_30", "TYPE_31",
-
-    // Reserved for future expansion (32-63)
-    "TYPE_32", "TYPE_33", "TYPE_34", "TYPE_35",
-    "TYPE_36", "TYPE_37", "TYPE_38", "TYPE_39",
-    "TYPE_40", "TYPE_41", "TYPE_42", "TYPE_43",
-    "TYPE_44", "TYPE_45", "TYPE_46", "TYPE_47",
-    "TYPE_48", "TYPE_49", "TYPE_50", "TYPE_51",
-    "TYPE_52", "TYPE_53", "TYPE_54", "TYPE_55",
-    "TYPE_56", "TYPE_57", "TYPE_58", "TYPE_59",
-    "TYPE_60", "TYPE_61", "TYPE_62", "TYPE_63"};
-
-// LED patterns for status indication
-const LedPattern Core::LED_PATTERN_OK = {100, 3000};        // Long ON, short OFF (mostly off)
-const LedPattern Core::LED_PATTERN_I2C_ERROR = {100, 100};  // Fast blink (5 Hz)
-const LedPattern Core::LED_PATTERN_TYPE_ERROR = {500, 500}; // Slow blink (1 Hz)
+const LedPattern Core::kLedPatterns[] = {
+    {100, 3000}, // STATUS_OK: Long ON, short OFF (mostly off)
+    {100, 100},  // STATUS_I2C_ERROR: Fast blink (5 Hz)
+    {500, 500},  // STATUS_TYPE_ERROR: Slow blink (1 Hz)
+    {100, 400}   // STATUS_DEVICE_DETECTION: Detection blink (2 Hz)
+};
 
 //============================================================================
 // CONSTRUCTOR
 //============================================================================
 
 Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
-           InputManager *inputManager, RoomSerial *roomBus)
+           InputManager *inputManager, RoomSerial *roomBus, IOExpander *ioExpander)
     : m_pixels(pixels),
       m_synth(synth),
       m_animation(animation),
       m_inputManager(inputManager),
       m_roomBus(roomBus),
+      m_ioExpander(ioExpander),
       m_matrixPanel(new MatrixPanel(pixels)), // Initialize matrix panel
       m_mode(MODE_INTERACTIVE),
       m_colorIndex(0),
@@ -145,9 +125,7 @@ Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
 //============================================================================
 
 // System-wide initialization - sets up all hardware and firmware modules
-void Core::systemInit(PixelStrip *pixels, Synth *synth, Animation *animation,
-                      InputManager *inputManager, RoomSerial *roomBus,
-                      Core *core, IOExpander *ioExpander, hw_timer_t **timer)
+void Core::begin()
 {
         delay(500);
         Serial.begin(115200);
@@ -161,47 +139,48 @@ void Core::systemInit(PixelStrip *pixels, Synth *synth, Animation *animation,
 
         // Initialize I/O Expander
         bool i2cOk = false;
-        if (ioExpander->begin())
+        if (m_ioExpander->begin())
         {
-                ioExpander->stopAllMotors();
+                m_ioExpander->stopAllMotors();
                 i2cOk = true;
         }
 
         // Initialize pixel strip
-        pixels->begin();
+        m_pixels->begin();
 
         // Initialize button handling (single button now)
         initButtons(BTN_1_PIN);
 
         // Configure hardware timer for button updates and animation timing
-        *timer = ESPTimer::begin(0, ISR_INTERVAL_MS, &refreshTimer);
+        // Note: We don't store the timer handle as we don't need to stop it
+        ESPTimer::begin(0, ISR_INTERVAL_MS, &refreshTimer);
 
         // Initialize watchdog (1 second timeout)
         Watchdog::begin(1, true);
 
         // Initialize synthesizer
-        synth->init(SOUND_DEFAULT);
+        m_synth->init(SOUND_DEFAULT);
 
         // Initialize RS-485 communication for Room Bus
-        roomBus->begin();
+        m_roomBus->begin();
 
         // Initialize core firmware modules
-        animation->init();    // Animation system
-        inputManager->init(); // Input management for keypad and switches
-        core->init();         // Core firmware logic
+        m_animation->init();    // Animation system
+        m_inputManager->init(); // Input management for keypad and switches
+        init();                 // Core firmware logic
 
         // Set status LED based on I2C health
         if (!i2cOk)
         {
-                core->setStatusLed(STATUS_I2C_ERROR);
+                setStatusLed(STATUS_I2C_ERROR);
         }
         else
         {
-                core->setStatusLed(STATUS_OK);
+                setStatusLed(STATUS_OK);
         }
 
         // Print comprehensive boot report
-        core->printBootReport();
+        printBootReport();
 }
 
 void Core::init()
@@ -369,7 +348,7 @@ u8 Core::readDeviceType(bool verbose)
                 Serial.print(" -> Type ");
                 Serial.print(deviceType);
                 Serial.print(" (");
-                Serial.print(kDeviceTypeNames[deviceType]);
+                Serial.print(DeviceConfigurations::getDeviceName(deviceType));
                 Serial.println(")");
         }
 
@@ -494,6 +473,11 @@ void Core::printBootReport()
         Serial.println("└────────────────────────────────────────────────────────────┘");
 
         Serial.println();
+        // if status is not ok, show a warning message
+        if (m_statusLedMode != STATUS_OK)
+        {
+                Serial.println("⚠️  WARNING: Device status indicates an issue!");
+        }
         Serial.println("ℹ️  To reconfigure device type: Long-press boot button");
         Serial.println("ℹ️  Device ready for operation");
         Serial.println();
@@ -575,7 +559,7 @@ const char *Core::getDeviceTypeName() const
         if (m_deviceType > MAX_FUTURE_TYPE)
                 return "INVALID";
 
-        return kDeviceTypeNames[m_deviceType];
+        return DeviceConfigurations::getDeviceName(m_deviceType);
 }
 
 //============================================================================
@@ -678,22 +662,6 @@ void Core::handleInputEvent(InputEvent event)
                 }
                 break;
 
-        case INPUT_SWITCH1_ON:
-                Serial.println("Switch 1: ON");
-                break;
-
-        case INPUT_SWITCH1_OFF:
-                Serial.println("Switch 1: OFF");
-                break;
-
-        case INPUT_SWITCH2_ON:
-                Serial.println("Switch 2: ON");
-                break;
-
-        case INPUT_SWITCH2_OFF:
-                Serial.println("Switch 2: OFF");
-                break;
-
         default:
                 break;
         }
@@ -780,7 +748,7 @@ void Core::handleRoomBusFrame(const RoomFrame &frame)
         Serial.println(frame.cmd_dev, HEX);
 
         // Handle color set command
-        if (frame.cmd_srv == CMD_GLOW_SET_COLOR)
+        if (frame.cmd_srv == GLOW_SET_COLOR)
         {
                 // Extract RGB from parameters
                 u8 r = frame.p[0];
@@ -801,25 +769,11 @@ void Core::handleRoomBusFrame(const RoomFrame &frame)
 // STATUS LED CONTROL
 //============================================================================
 
-const LedPattern &Core::getCurrentLedPattern() const
-{
-        switch (m_statusLedMode)
-        {
-        case STATUS_OK:
-                return LED_PATTERN_OK;
-        case STATUS_I2C_ERROR:
-                return LED_PATTERN_I2C_ERROR;
-        case STATUS_TYPE_ERROR:
-                return LED_PATTERN_TYPE_ERROR;
-        default:
-                return LED_PATTERN_OK;
-        }
-}
-
 void Core::setStatusLed(StatusLedMode mode)
 {
         // Validate mode
-        if (mode != STATUS_OK && mode != STATUS_I2C_ERROR && mode != STATUS_TYPE_ERROR)
+        if (mode != STATUS_OK && mode != STATUS_I2C_ERROR &&
+            mode != STATUS_TYPE_ERROR && mode != STATUS_DEVICE_DETECTION)
         {
                 Serial.print("ERROR: Invalid status LED mode ");
                 Serial.println((int)mode);
@@ -834,14 +788,8 @@ void Core::setStatusLed(StatusLedMode mode)
 
 void Core::updateStatusLed()
 {
-        // Don't update status LED in type detection mode
-        if (m_mode == MODE_TYPE_DETECTION)
-        {
-                return;
-        }
-
         u32 now = millis();
-        const LedPattern &pattern = getCurrentLedPattern();
+        const LedPattern &pattern = kLedPatterns[m_statusLedMode];
 
         // Determine current interval (ON time or OFF time)
         u32 interval = m_ledState ? pattern.timeOn : pattern.timeOff;
@@ -924,18 +872,18 @@ void Core::enterTypeDetectionMode()
 
         // Clear pixels
         m_pixels->clear();
-        m_pixels->show();
+        //m_pixels->show();
 
         // Initialize type detection state
         m_lastTypeRead = millis() - READ_INTERVAL_MS + INITIAL_DELAY_MS; // Read after 500ms instead of immediate
-        m_typeDetectionBlink = false;
 
         // Keep current device type - don't change it until we get a valid reading
         // Initialize last detected to INVALID to force first valid reading to be logged
         m_lastDetectedType = INVALID_TYPE;
 
-        // Turn off status LED (will be used for reading flash only)
-        digitalWrite(STATUS_LED_PIN, LOW);
+        // Set status LED to detection mode
+        m_previousStatusLedMode = m_statusLedMode;
+        setStatusLed(STATUS_DEVICE_DETECTION);
 }
 
 void Core::exitTypeDetectionMode()
@@ -977,10 +925,7 @@ void Core::exitTypeDetectionMode()
         m_mode = m_previousMode;
 
         // Restore status LED to previous state
-        if (m_statusLedMode == STATUS_OK)
-        {
-                digitalWrite(STATUS_LED_PIN, HIGH);
-        }
+        setStatusLed(m_previousStatusLedMode);
 
         // Play exit sound
         m_synth->setWaveform(WAVE_SINE);
@@ -1046,7 +991,7 @@ void Core::updateTypeDetectionMode()
                         {
                                 // Type changed from previous valid reading
                                 Serial.print("Type changed: ");
-                                Serial.print(kDeviceTypeNames[m_lastDetectedType > MAX_CURRENT_TYPE ? MAX_CURRENT_TYPE : m_lastDetectedType]);
+                                Serial.print(DeviceConfigurations::getDeviceName(m_lastDetectedType > MAX_CURRENT_TYPE ? MAX_CURRENT_TYPE : m_lastDetectedType));
                                 Serial.print(" (");
                                 Serial.print(m_lastDetectedType);
                                 Serial.print(") -> ");
@@ -1064,22 +1009,11 @@ void Core::updateTypeDetectionMode()
                                 // Same as last reading - no log needed
                         }
 
-                        // Flash LED once (LED_FLASH_MS pulse)
-                        digitalWrite(STATUS_LED_PIN, HIGH);
-                        m_typeDetectionBlink = true;
-
                         // Play a short beep
                         m_synth->setWaveform(WAVE_SQUARE);
                         m_synth->setADSR(1, 10, 20, 20);
                         m_synth->playNote(NOTE_A4, 50, 100);
                 }
-        }
-
-        // Turn off LED after flash duration
-        if (m_typeDetectionBlink && (now - m_lastTypeRead >= LED_FLASH_MS))
-        {
-                digitalWrite(STATUS_LED_PIN, LOW);
-                m_typeDetectionBlink = false;
         }
 }
 
@@ -1101,9 +1035,12 @@ void Core::enterKeypadTestMode()
         m_previousMode = m_mode;
         m_mode = MODE_KEYPAD_TEST;
 
+        // Stop any running animation and clear LEDs
+        m_animation->stop(true);
+
         // Turn off all LEDs
-        m_pixels->clear();
-        m_pixels->show();
+        // m_pixels->clear();
+        //m_pixels->show();
 
         // Reset all keypad LED states
         for (int i = 0; i < 16; i++)
@@ -1120,7 +1057,7 @@ void Core::exitKeypadTestMode()
 
         // Clear all LEDs
         m_pixels->clear();
-        m_pixels->show();
+        //m_pixels->show();
 
         // Restore previous mode
         m_mode = m_previousMode;

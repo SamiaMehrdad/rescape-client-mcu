@@ -33,17 +33,15 @@ namespace KeypadConfig
         constexpr unsigned long MIN_PRESS_INTERVAL_MS = 200; // Minimum 200ms between events
 }
 
-// Motor control pins (H-bridge control)
-constexpr u8 MOT1A = 0; // P00
-constexpr u8 MOT1B = 1; // P01
-constexpr u8 MOT2A = 2; // P02
-constexpr u8 MOT2B = 3; // P03
-
-// Switch/sensor input pins
-constexpr u8 SW_1 = 4; // P04
-constexpr u8 SW_2 = 5; // P05
-constexpr u8 SW_3 = 6; // P06
-constexpr u8 SW_4 = 7; // P07
+// Motor control pins (H-bridge control for 4 motors)
+constexpr u8 MOT1A = 0; // P00 - Motor A forward
+constexpr u8 MOT1B = 1; // P01 - Motor A reverse
+constexpr u8 MOT2A = 2; // P02 - Motor B forward
+constexpr u8 MOT2B = 3; // P03 - Motor B reverse
+constexpr u8 MOT3A = 4; // P04 - Motor C forward
+constexpr u8 MOT3B = 5; // P05 - Motor C reverse
+constexpr u8 MOT4A = 6; // P06 - Motor D forward
+constexpr u8 MOT4B = 7; // P07 - Motor D reverse
 
 // Keypad key definitions (4x4 matrix)
 constexpr char KEYPAD_KEYS[KEYPAD_ROWS][KEYPAD_COLS] = {
@@ -152,13 +150,7 @@ public:
          */
         u8 scanKeypad();
 
-        /**
-         * Get all keypad keys as a 16-bit bitmap
-         * Each bit represents a key: bit 0 = key 0, bit 15 = key 15
-         * A set bit (1) means the key is currently pressed
-         * @return 16-bit bitmap of all key states (1 = pressed, 0 = released)
-         */
-        u16 getKeypadBitmap();
+        /* getKeypadBitmap removed: unused API (cleaned from code/docs) */
 
         /**
          * Get the last detected key index
@@ -194,35 +186,21 @@ public:
         void setMotorB(MotorDirection direction);
 
         /**
-         * Stop all motors
+         * Set motor C direction
+         * @param direction MOTOR_STOP, MOTOR_FORWARD, MOTOR_REVERSE, or MOTOR_BRAKE
+         */
+        void setMotorC(MotorDirection direction);
+
+        /**
+         * Set motor D direction
+         * @param direction MOTOR_STOP, MOTOR_FORWARD, MOTOR_REVERSE, or MOTOR_BRAKE
+         */
+        void setMotorD(MotorDirection direction);
+
+        /**
+         * Stop all motors (A, B, C, D)
          */
         void stopAllMotors();
-
-        // ========== Switch/Sensor Reading Methods ==========
-
-        /**
-         * Read switch 1 state
-         * @return true if switch closed/active (HIGH), false otherwise
-         */
-        bool readSwitch1();
-
-        /**
-         * Read switch 2 state
-         * @return true if switch closed/active (HIGH), false otherwise
-         */
-        bool readSwitch2();
-
-        /**
-         * Read switch 3 state
-         * @return true if switch closed/active (HIGH), false otherwise
-         */
-        bool readSwitch3();
-
-        /**
-         * Read switch 4 state
-         * @return true if switch closed/active (HIGH), false otherwise
-         */
-        bool readSwitch4();
 };
 
 #endif // IOEXPANDER_H

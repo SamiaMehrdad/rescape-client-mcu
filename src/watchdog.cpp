@@ -17,6 +17,12 @@
 
 static bool wdtInitialized = false;
 
+/************************* begin *******************************************
+ * Initialize watchdog with timeout (seconds).
+ ***************************************************************/
+/************************* begin *******************************************
+ * Initialize watchdog with timeout (seconds).
+ ***************************************************************/
 void Watchdog::begin(uint32_t timeoutSeconds, bool enablePanic)
 {
         if (wdtInitialized)
@@ -29,6 +35,12 @@ void Watchdog::begin(uint32_t timeoutSeconds, bool enablePanic)
         wdtInitialized = true;
 }
 
+/************************* reset *******************************************
+ * Kick/reset the watchdog timer.
+ ***************************************************************/
+/************************* reset *******************************************
+ * Kick/reset the watchdog timer.
+ ***************************************************************/
 void Watchdog::reset()
 {
         if (wdtInitialized)
@@ -37,6 +49,12 @@ void Watchdog::reset()
         }
 }
 
+/************************* disable *****************************************
+ * Disable watchdog monitoring.
+ ***************************************************************/
+/************************* disable *****************************************
+ * Disable watchdog monitoring.
+ ***************************************************************/
 void Watchdog::disable()
 {
         if (wdtInitialized)

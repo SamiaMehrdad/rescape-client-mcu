@@ -31,6 +31,9 @@ static const u16 SOUND_PRESETS[][5] = {
 
 static Synth *synthInstance = nullptr;
 
+/************************* sampleTimerISR *********************************
+ * Timer ISR: dispatch to active Synth instance.
+ ***************************************************************/
 void IRAM_ATTR sampleTimerISR()
 {
         if (synthInstance)
@@ -43,6 +46,9 @@ void IRAM_ATTR sampleTimerISR()
 // CONSTRUCTOR
 //============================================================================
 
+/************************* Synth constructor ******************************
+ * Construct Synth with output pin and PWM channel.
+ ***************************************************************/
 Synth::Synth(u8 outputPin, u8 pwmChannel)
     : pin(outputPin), channel(pwmChannel), sampleRate(8000),
       waveform(WAVE_SINE), playing(false), sampleIndex(0), noteDurationMs(0)
@@ -61,12 +67,18 @@ Synth::Synth(u8 outputPin, u8 pwmChannel)
 // PUBLIC METHODS
 //============================================================================
 
+/************************* init *******************************************
+ * Initialize synth with default sample rate and preset.
+ ***************************************************************/
 void Synth::init(SoundPreset preset)
 {
         begin(20000); // Fixed 20kHz sample rate for optimal quality
         setSoundPreset(preset);
 }
 
+/************************* setSoundPreset *********************************
+ * Apply a preset waveform and ADSR envelope.
+ ***************************************************************/
 void Synth::setSoundPreset(SoundPreset preset)
 {
         const u16 *params = SOUND_PRESETS[preset];
@@ -74,6 +86,9 @@ void Synth::setSoundPreset(SoundPreset preset)
         setADSR(params[1], params[2], params[3], params[4]);
 }
 
+/************************* begin *******************************************
+ * Configure PWM and timer for given sample rate.
+ ***************************************************************/
 void Synth::begin(u16 sampleRateHz)
 {
         sampleRate = sampleRateHz;
@@ -89,11 +104,17 @@ void Synth::begin(u16 sampleRateHz)
         timerAlarmEnable(sampleTimer);
 }
 
+/************************* setWaveform ************************************
+ * Select output waveform.
+ ***************************************************************/
 void Synth::setWaveform(Waveform wave)
 {
         waveform = wave;
 }
 
+/************************* setADSR ***************************************
+ * Configure envelope attack/decay/sustain/release.
+ ***************************************************************/
 void Synth::setADSR(u16 attack, u16 decay, u8 sustain, u16 release)
 {
         envelope.attackMs = attack;
@@ -106,6 +127,9 @@ void Synth::setADSR(u16 attack, u16 decay, u8 sustain, u16 release)
 // WAVEFORM GENERATION
 //============================================================================
 
+/************************* generateSample *********************************
+ * Generate one waveform sample for a phase [0,1).
+ ***************************************************************/
 u8 Synth::generateSample(float phase)
 {
         u8 sample = 128; // Center value
@@ -147,6 +171,9 @@ u8 Synth::generateSample(float phase)
 // ADSR ENVELOPE
 //============================================================================
 
+/************************* getEnvelopeAmplitude ***************************
+ * Compute ADSR amplitude at time in ms.
+ ***************************************************************/
 u8 Synth::getEnvelopeAmplitude(u32 timeMs)
 {
         const u32 attackMs = std::max<u16>(1, envelope.attackMs);
@@ -185,6 +212,9 @@ u8 Synth::getEnvelopeAmplitude(u32 timeMs)
         return remaining;
 }
 
+/************************* playNote **************************************
+ * Start a note with frequency, duration, and base volume.
+ ***************************************************************/
 void Synth::playNote(u16 freq, u16 durationMs, u8 volume)
 {
         frequency = freq;
@@ -200,12 +230,18 @@ void Synth::playNote(u16 freq, u16 durationMs, u8 volume)
         playing = true;
 }
 
+/************************* stopNote **************************************
+ * Stop playback immediately.
+ ***************************************************************/
 void Synth::stopNote()
 {
         playing = false;
         ledcWrite(channel, 128); // Center value (silence)
 }
 
+/************************* isPlaying *************************************
+ * Check whether a note is active.
+ ***************************************************************/
 bool Synth::isPlaying()
 {
         return playing;
@@ -215,6 +251,9 @@ bool Synth::isPlaying()
 // SAMPLE GENERATION (ISR)
 //============================================================================
 
+/************************* updateSample ***********************************
+ * ISR: generate and output next audio sample.
+ ***************************************************************/
 void IRAM_ATTR Synth::updateSample()
 {
         if (!playing)

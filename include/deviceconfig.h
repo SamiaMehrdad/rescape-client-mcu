@@ -15,13 +15,15 @@
 
 #include "msk.h"
 #include "ioexpander.h"
+#include "roombus.h" // Room Bus server command IDs
+#include <initializer_list>
 
 // Maximum device types supported (0-63)
 constexpr u8 MAX_DEVICE_TYPES = 64;
 
 // Maximum hardware components
-constexpr u8 MAX_MOTORS = 2;
-constexpr u8 MAX_SWITCHES = 4;
+constexpr u8 MAX_MOTORS = 4; // Increased from 2 to 4
+constexpr u8 MAX_KEYS = 16;  // 16 keypad keys (4x4 matrix)
 
 /**
  * @brief Device Type Definition List (X-Macro Pattern)
@@ -119,32 +121,72 @@ constexpr const char *DEVICE_TYPE_NAMES[MAX_DEVICE_TYPES] = {
 
 /**
  * @brief Named hardware component
- * Simple structure for motors and switches with optional names
+ * Simple structure for motors, keys, and other components with optional names
  */
 struct NamedComponent
 {
         const char *name; // Component name/purpose (nullptr if unused)
 };
 
+// Room Bus command set for a device (inline array)
+constexpr u8 MAX_COMMANDS = 8; // adjust if a device needs more
+struct CommandSet
+{
+        RoomServerCommand cmds[MAX_COMMANDS]; // Supported server→device commands
+        // Explicit count so we can stop iterating before unused slots; sizeof(cmds) is
+        // always MAX_COMMANDS, so this is the only reliable way to know how many
+        // initializers were actually provided.
+        u8 count; // Number of valid commands in cmds
+};
+
+// Build a CommandSet while deducing the count; keeps call sites free of manual counts.
+// Usage: makeCommandSet({CMD_A, CMD_B}) or makeCommandSet({}) for empty.
+inline CommandSet makeCommandSet(std::initializer_list<RoomServerCommand> list)
+{
+        CommandSet cs{};
+        const size_t n = list.size();
+        const size_t capped = (n > MAX_COMMANDS) ? MAX_COMMANDS : n;
+
+        size_t i = 0;
+        for (auto cmd : list)
+        {
+                if (i >= capped)
+                {
+                        break; // defensive guard; static caps at runtime too
+                }
+                cs.cmds[i++] = cmd;
+        }
+
+        cs.count = static_cast<u8>(capped);
+        return cs;
+}
+
+// Convenience overload for empty sets
+inline CommandSet makeCommandSet()
+{
+        return makeCommandSet({});
+}
+
 /**
  * @brief Complete device hardware configuration
  * Simple configuration with component names (nullptr = not used)
- * 
+ *
  * Note: Device type is implicit from array index in kConfigs[].
  * kConfigs[0] = TERMINAL, kConfigs[1] = GLOW_BUTTON, etc.
  */
 struct DeviceConfig
 {
-        // Matrix cells (keypad + LED pairs)
-        u8 matrixCellCount; // Number of matrix cells used (0-16)
+        // LED count (can be matrix-aligned or LED-only strip)
+        u8 cellCount; // Number of LEDs (0-255). First 0-16 align with keypad matrix if switches are used.
 
-        // Motors (0-2 motors available) - nullptr name = not used
+        // Keypad keys (0-16 keys available) - nullptr name = use default (e.g., "1", "2", "A", etc.)
+        NamedComponent keys[MAX_KEYS]; // Optional custom names for each key
+
+        // Motors (0-4 motors available) - nullptr name = not used
         NamedComponent motors[MAX_MOTORS]; // Motor names/purposes
 
-        // Switches/Sensors (0-4 available) - nullptr name = not used
-        NamedComponent switches[MAX_SWITCHES]; // Switch names/purposes
-
-        bool isConfigured; // Is this type fully configured?
+        // Supported server→device commands for this device
+        CommandSet commands; // count=0 means none
 };
 
 /**
@@ -167,42 +209,43 @@ public:
          */
         static const char *getDeviceName(u8 deviceType);
 
-        /**
-         * @brief Get number of matrix cells used by device
-         * @param deviceType Device type ID (0-63)
-         * @return Number of cells (0-16)
-         */
-        static u8 getMatrixCellCount(u8 deviceType);
+        /* getCellCount removed: unused API (cleaned from code/docs) */
 
         /**
          * @brief Get number of motors used by device
          * @param deviceType Device type ID (0-63)
-         * @return Number of motors (0-2)
+         * @return Number of motors (0-4)
          */
         static u8 getMotorCount(u8 deviceType);
 
         /**
-         * @brief Get number of switches used by device
+         * @brief Get name/purpose of a specific key
          * @param deviceType Device type ID (0-63)
-         * @return Number of switches (0-4)
+         * @param keyIndex Key index (0-15)
+         * @return Key name, or nullptr if using default name
          */
-        static u8 getSwitchCount(u8 deviceType);
+        static const char *getKeyName(u8 deviceType, u8 keyIndex);
 
         /**
          * @brief Get name/purpose of a specific motor
          * @param deviceType Device type ID (0-63)
-         * @param motorIndex Motor index (0-1)
+         * @param motorIndex Motor index (0-3)
          * @return Motor name, or nullptr if not configured
          */
         static const char *getMotorName(u8 deviceType, u8 motorIndex);
 
         /**
-         * @brief Get name/purpose of a specific switch
+         * @brief Get supported server→device commands for a device
          * @param deviceType Device type ID (0-63)
-         * @param switchIndex Switch index (0-3)
-         * @return Switch name, or nullptr if not configured
+         * @return CommandSet pointer (may be nullptr if none)
          */
-        static const char *getSwitchName(u8 deviceType, u8 switchIndex);
+        static const CommandSet *getCommandSet(u8 deviceType);
+
+        /**
+         * @brief Get device commands merged with common core commands
+         * Always includes core handshake/ping/reset plus per-device commands.
+         */
+        static CommandSet getMergedCommandSet(u8 deviceType);
 
         /**
          * @brief Print device configuration summary to Serial
@@ -212,7 +255,7 @@ public:
 
         /**
          * @brief Print hardware configuration details to Serial
-         * Displays matrix cells, motors, and switches for a device type.
+         * Displays matrix cells, keys, and motors for a device type.
          * Can be used in boot reports and device type selection.
          * @param deviceType Device type ID (0-63)
          * @param indent String to prepend to each line (e.g., "│   " for box formatting)

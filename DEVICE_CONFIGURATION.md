@@ -52,12 +52,7 @@ struct DeviceConfig {
 
 Provides query and utility functions:
 
--   `getConfig(deviceType)` - Get full configuration
--   `usesMatrix(deviceType)` - Check if uses matrix
--   `usesMotors(deviceType)` - Check if uses motors
--   `usesSwitches(deviceType)` - Check if uses switches
--   `getMatrixCellCount(deviceType)` - Get number of active cells
--   `isCellEnabled(deviceType, cellIndex)` - Check specific cell
+-   `getConfig(deviceType)` - Get full configuration -- `getCellCount(deviceType)` - Removed. Use `DeviceConfigurations::getConfig(deviceType)->cellCount` instead.
 -   `printConfig(deviceType)` - Print configuration to Serial
 
 ## Configured Device Types
@@ -172,22 +167,19 @@ Reserved for expansion (unconfigured)
 
 ### Query Device Capabilities
 
-```cpp
+````cpp
 #include "deviceconfig.h"
 
 // Check if device uses matrix
-if (DeviceConfigurations::usesMatrix(DeviceType::TERMINAL)) {
-    u8 cellCount = DeviceConfigurations::getMatrixCellCount(DeviceType::TERMINAL);
-    Serial.print("Terminal uses ");
-    Serial.print(cellCount);
-    Serial.println(" matrix cells");
-}
+```cpp
+// Get cell count
+u8 cellCount = 0; // use DeviceConfigurations::getConfig(DeviceType::TERMINAL)->cellCount
+Serial.print("Terminal uses ");
+Serial.print(cellCount);
+Serial.println(" LED cells");
+````
 
-// Check specific cell
-if (DeviceConfigurations::isCellEnabled(DeviceType::NUM_BOX, 5)) {
-    // Cell 5 is enabled for NumBox
-}
-```
+````
 
 ### Get Full Configuration
 
@@ -203,7 +195,7 @@ if (config && config->isConfigured) {
         }
     }
 }
-```
+````
 
 ### Print Configuration
 

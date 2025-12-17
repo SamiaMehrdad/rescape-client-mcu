@@ -45,31 +45,7 @@ public:
          */
         static void end(hw_timer_t *timer);
 
-        /**
-         * Change timer interval (timer must be stopped first)
-         * @param timer Pointer to timer
-         * @param intervalMs New interval in milliseconds
-         */
-        static void setInterval(hw_timer_t *timer, u16 intervalMs);
-
-        /**
-         * Change timer interval in microseconds (timer must be stopped first)
-         * @param timer Pointer to timer
-         * @param intervalUs New interval in microseconds
-         */
-        static void setIntervalMicros(hw_timer_t *timer, u32 intervalUs);
-
-        /**
-         * Start/resume a timer
-         * @param timer Pointer to timer
-         */
-        static void start(hw_timer_t *timer);
-
-        /**
-         * Stop/pause a timer
-         * @param timer Pointer to timer
-         */
-        static void stop(hw_timer_t *timer);
+        /* setInterval / setIntervalMicros / start / stop removed: unused API */
 
         /**
          * Get the prescaler value for 1 MHz tick rate

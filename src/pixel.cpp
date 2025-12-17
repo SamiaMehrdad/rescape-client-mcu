@@ -9,6 +9,13 @@
 #include "watchdog.h"
 #include <Arduino.h>
 
+/************************* PixelStrip constructor ***************************
+ * Construct a PixelStrip with logical/physical grouping.
+ * @param pin GPIO driving the NeoPixel strip.
+ * @param count Logical pixel count (pre-grouping).
+ * @param groupSize Physical LEDs per logical pixel (>=1).
+ * @param brightness Initial global brightness (0-255).
+ ***************************************************************/
 PixelStrip::PixelStrip(u8 pin, u8 count, u8 groupSize, u8 brightness)
     : pixels(count * (groupSize > 0 ? groupSize : 1), pin, NEO_GRB + NEO_KHZ800),
       physicalCount(count * (groupSize > 0 ? groupSize : 1)),
@@ -28,12 +35,20 @@ PixelStrip::PixelStrip(u8 pin, u8 count, u8 groupSize, u8 brightness)
         }
 }
 
+/************************* begin *******************************************
+ * Initialize hardware and blank the strip.
+ ***************************************************************/
 void PixelStrip::begin()
 {
         pixels.begin();
         pixels.show(); // Initialize all pixels to 'off'
 }
 
+/************************* setColor (packed) *******************************
+ * Set a logical pixel color from packed 0x00RRGGBB.
+ * @param index Logical pixel index.
+ * @param color Packed RGB color.
+ ***************************************************************/
 void PixelStrip::setColor(u8 index, u32 color)
 {
         // Extract RGB and delegate to RGB version
@@ -59,6 +74,12 @@ void PixelStrip::setColor(u8 index, u8 r, u8 g, u8 b)
         }
 }
 
+/************************* setAll (RGB) ***********************************
+ * Set all logical pixels to one RGB value.
+ * @param r Red component (0-255).
+ * @param g Green component (0-255).
+ * @param b Blue component (0-255).
+ ***************************************************************/
 void PixelStrip::setAll(u8 r, u8 g, u8 b)
 {
         u32 color = ((u32)r << 16) | ((u32)g << 8) | b;
@@ -76,6 +97,10 @@ void PixelStrip::setAll(u8 r, u8 g, u8 b)
         }
 }
 
+/************************* setAll (packed) ********************************
+ * Set all logical pixels to a packed color.
+ * @param color Packed 0x00RRGGBB color.
+ ***************************************************************/
 void PixelStrip::setAll(u32 color)
 {
         // Update buffer
@@ -95,6 +120,9 @@ void PixelStrip::setAll(u32 color)
         }
 }
 
+/************************* clear ******************************************
+ * Clear all pixels and buffer to off.
+ ***************************************************************/
 void PixelStrip::clear()
 {
         // Clear buffer
@@ -105,22 +133,28 @@ void PixelStrip::clear()
 
         // Clear physical LEDs
         pixels.clear();
+        pixels.show();
 }
 
+/************************* show *******************************************
+ * Push current NeoPixel buffer to the strip.
+ ***************************************************************/
 void PixelStrip::show()
 {
         pixels.show();
 }
 
+/************************* setBrightness ***********************************
+ * Adjust global brightness (0-255).
+ ***************************************************************/
 void PixelStrip::setBrightness(u8 brightness)
 {
         pixels.setBrightness(brightness);
 }
 
-/**
- * Apply the color buffer to the actual NeoPixels
- * This should be called from the ISR to refresh the display
- */
+/************************* applyBuffer ************************************
+ * Apply logical buffer to physical LEDs and show (ISR/refresh path).
+ ***************************************************************/
 void IRAM_ATTR PixelStrip::applyBuffer()
 {
         for (u8 i = 0; i < logicalCount; i++)
@@ -140,10 +174,10 @@ void IRAM_ATTR PixelStrip::applyBuffer()
         pixels.show();
 }
 
-/**
- * Pixel check routine - turns on each LED to white one by one
- * Useful for testing that all LEDs are working
- */
+/************************* pixelCheck *************************************
+ * Walk-test each logical pixel to white with delays.
+ * @param delayMs Delay between lighting successive pixels.
+ ***************************************************************/
 void PixelStrip::pixelCheck(u16 delayMs)
 {
         Serial.println("\n=== Pixel Check Starting ===");
