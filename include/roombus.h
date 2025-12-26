@@ -25,7 +25,7 @@
 #define EVENT_MAX 0xFF
 
 // ---------- Device types ----------
-// Device IDs are defined once in DEVICE_TYPE_LIST (see deviceconfig.h).
+// Device IDs are defined in deviceconfig.h (enum DeviceType).
 // Use DeviceType from that header instead of a duplicate enum here to avoid drift.
 
 // ---------- Core ops (0x01–0x1F) ----------
@@ -47,10 +47,11 @@ typedef struct
 typedef enum
 {
     // Core (common across all devices; 0x01-0x3F)
-    CORE_HELLO = 0x01, // device announces presence
-    CORE_ACK = 0x02,   // ack for reliability/simple handshake
-    CORE_PING = 0x03,  // liveness check
-    CORE_RESET = 0x04, // soft reset/restart
+    CORE_HELLO = 0x01,       // device announces presence
+    CORE_ACK = 0x02,         // ack for reliability/simple handshake
+    CORE_PING = 0x03,        // liveness check
+    CORE_RESET = 0x04,       // soft reset/restart
+    CORE_SET_ADDRESS = 0x05, // server assigns address to device
 
     // Device-specific commands start at 0x40
 
@@ -81,8 +82,8 @@ typedef enum
     // Terminal
     TERM_RESET = 0x40,
 
-    // Bomb
-    BOMB_SET_STATE = 0x40,
+    // Purger
+    PURGER_SET_STATE = 0x40,
 
     // Screen
     SCR_LOAD = 0x40,

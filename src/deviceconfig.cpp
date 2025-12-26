@@ -5,383 +5,184 @@
  * Simple configuration database defining how many matrix cells, motors,
  * and switches each device type uses, with optional component names.
  *
- * Device type names are defined in deviceconfig.h as DEVICE_TYPE_NAMES array.
- * This is the single source of truth for device names.
+ * This is the single source of truth for device definitions.
  */
 
 #include "deviceconfig.h"
 #include <Arduino.h>
 
-//============================================================================
-// DEVICE CONFIGURATION DATABASE
-//============================================================================
+// =================================================================================
+// MASTER DEVICE LIST
+// =================================================================================
+// This is the only place you need to edit to add/change devices.
+// IDs must be unique. Order doesn't strictly matter, but keeping them sorted helps.
+// =================================================================================
 
+static const DeviceDefinition DEVICE_CATALOG[] = {
 
-/************************* kCommonCommands ********************************
- * Commands shared by all device types (hello/ack/ping/reset)
- ***************************************************************/
-static const CommandSet kCommonCommands = makeCommandSet({CORE_HELLO, CORE_ACK, CORE_PING, CORE_RESET});
+    // ID 0: Terminal
+    {
+        TERMINAL, "Terminal", {.cellCount = 16, .keyNames = {}, // Default names
+                               .motorNames = {},
+                               .commands = makeCommandSet({TERM_RESET})}},
 
-const DeviceConfig DeviceConfigurations::kConfigs[MAX_DEVICE_TYPES] = {
-    // TYPE 0: Terminal - Full 4x4 keypad with LEDs (uses default key names)
-    {.cellCount = 16, // Full 4x4 matrix
-     .keys = {},      // Use default names: "1","2","3","A", "4","5","6","B", etc.
-     .motors = {},    // No motors
-     .commands = makeCommandSet({TERM_RESET})},
+    // ID 1: Glow Button
+    {
+        GLOW_BUTTON, "GlowButton", {.cellCount = 1, .keyNames = {"Activate"}, .motorNames = {}, .commands = makeCommandSet({GLOW_SET_COLOR})}},
 
-    // TYPE 1: GlowButton - Single button with LED
-    {.cellCount = 1, // Single button
-     .keys = {
-         // Custom name for the single key
-         {"Activate"} // Key 0: "Activate" instead of "1"
-     },
-     .motors = {},
-     .commands = makeCommandSet({GLOW_SET_COLOR})},
+    // ID 2: Num Box
+    {
+        NUM_BOX, "NumBox",
+        {.cellCount = 28, // 4*6 7segments
+         .keyNames = {},
+         .motorNames = {},
+         .commands = makeCommandSet({NUM_SET_DIGIT_COLOR, NUM_SET_DIGIT_VAL, NUM_SET_ROW_NUM})}},
 
-    // TYPE 2: NumBox - Numeric keypad (10 keys: 0-9)
-    {.cellCount = 4 * 6 * 7, // 4*6 7segments
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet({NUM_SET_DIGIT_COLOR, NUM_SET_DIGIT_VAL, NUM_SET_ROW_NUM})},
+    // ID 3: Timer
+    {
+        TIMER, "Timer", {.cellCount = 4, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({TMR_SET_COLOR, TMR_SET_VALUE, TMR_START, TMR_PAUSE})}},
 
-    // TYPE 3: Timer - Display with 4 buttons
-    {.cellCount = 4, // Control buttons
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet({TMR_SET_COLOR, TMR_SET_VALUE, TMR_START, TMR_PAUSE})},
+    // ID 4: Glow Dots
+    {
+        GLOW_DOTS, "GlowDots", {.cellCount = 16, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({DOTS_SET_COLORS, DOTS_SET_MOVE, DOTS_SET_DELAY, DOTS_SET_LED})}},
 
-    // TYPE 4: GlowDots - LED display grid
-    {.cellCount = 16, // Full LED grid
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet({DOTS_SET_COLORS, DOTS_SET_MOVE, DOTS_SET_DELAY, DOTS_SET_LED})},
+    // ID 5: QB
+    {
+        QB, "QB", {.cellCount = 16, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({QB_SET_COLORS, QB_SET_MODES})}},
 
-    // TYPE 5: QB - Puzzle with buttons and motor
-    {.cellCount = 16, // 4x4 button array
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet({QB_SET_COLORS, QB_SET_MODES})},
+    // ID 6: RGB Mixer
+    {
+        RGB_MIXER, "RGBMixer", {.cellCount = 8, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}},
 
-    // TYPE 6: RGBMixer - Color mixing interface
-    {.cellCount = 8, // R, G, B up/down and check buttons
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet()},
+    // ID 7: Purger
+    {
+        PURGER, "Purger", {.cellCount = 16, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({PURGER_SET_STATE})}},
 
-    // TYPE 7: Bomb - Defusal interface
-    {.cellCount = 16, // Full keypad
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet({BOMB_SET_STATE})},
+    // ID 8: Final Order
+    {
+        FINAL_ORDER, "FinalOrder", {.cellCount = 12, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({FINAL_RESET})}},
 
-    // TYPE 8: FinalOrder - Sequence puzzle
-    {.cellCount = 12, // 3x4 sequence buttons
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet({FINAL_RESET})},
+    // ID 9: Ball Gate
+    {
+        BALL_GATE, "BallGate", {.cellCount = 1, .keyNames = {}, .motorNames = {"Gate motor", "Reject motor"}, .commands = makeCommandSet({})}},
 
-    // TYPE 9: BallGate - Ball release mechanism
-    {.cellCount = 1, // LED only, gate indicator
-     .keys = {},
-     .motors = {
-         {"Gate motor"},  // Gate open
-         {"Reject motor"} // Reject ball
-     },
-     .commands = makeCommandSet()},
+    // ID 10: Actuator
+    {
+        ACTUATOR, "Actuator", {.cellCount = 0, .keyNames = {}, .motorNames = {"Actuator 1", "Actuator 2"}, .commands = makeCommandSet({ACT_OPEN, ACT_CLOSE})}},
 
-    // TYPE 10: Actuator - Motor control device
-    {.cellCount = 0, // No matrix
-     .keys = {},
-     .motors = {
-         {"Actuator 1"}, // Motor 1
-         {"Actuator 2"}  // Motor 2
-     },
-     .commands = makeCommandSet({ACT_OPEN, ACT_CLOSE})},
+    // ID 11: The Wall
+    {
+        THE_WALL, "TheWall", {.cellCount = 0, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}},
 
-    // TYPE 11: TheWall - Grid puzzle
-    {.cellCount = 8, // Slots control
-     .keys = {},
-     .motors = {{"Fall"}, {"Remove"}},
-     .commands = makeCommandSet()},
+    // ID 12: Scores
+    {
+        SCORES, "Scores", {.cellCount = 0, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}},
 
-    // TYPE 12: Scores - Score display with buttons
-    {.cellCount = 2, // Player buttons
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet()},
+    // ID 13: Ball Base
+    {
+        BALL_BASE, "BallBase", {.cellCount = 0, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}}};
 
-    // TYPE 13: BallBase - Ball detection base
-    {.cellCount = 4, // Position indicators
-     .keys = {},
-     .motors = {},
-     .commands = makeCommandSet({BALL_ACTIVATE})},
+static const size_t DEVICE_COUNT = sizeof(DEVICE_CATALOG) / sizeof(DEVICE_CATALOG[0]);
 
-    // TYPES 14-63: Unconfigured (default zero-initialized)
-};
+// =================================================================================
+// Implementation
+// =================================================================================
 
-/************************* getConfig **************************************
- * Lookup config pointer for a device type.
- ***************************************************************/
-const DeviceConfig *DeviceConfigurations::getConfig(u8 deviceType)
+const DeviceDefinition *DeviceConfigurations::getDefinition(DeviceType type)
 {
-        if (deviceType >= MAX_DEVICE_TYPES)
+        for (size_t i = 0; i < DEVICE_COUNT; i++)
         {
-                return nullptr;
-        }
-        return &kConfigs[deviceType];
-}
-
-/************************* getDeviceName **********************************
- * Get device type name string.
- ***************************************************************/
-const char *DeviceConfigurations::getDeviceName(u8 deviceType)
-{
-        if (deviceType >= MAX_DEVICE_TYPES)
-        {
-                return "INVALID";
-        }
-        return DEVICE_TYPE_NAMES[deviceType];
-}
-
-/************************* getCellCount ***********************************
- * Get LED cell count for type.
- ***************************************************************/
-/* DeviceConfigurations::getCellCount removed (unused). */
-
-/************************* getMotorCount **********************************
- * Count motors with names for type.
- ***************************************************************/
-u8 DeviceConfigurations::getMotorCount(u8 deviceType)
-{
-        const DeviceConfig *config = getConfig(deviceType);
-        if (!config)
-        {
-                return 0;
-        }
-
-        // Count motors with non-null names
-        u8 count = 0;
-        for (u8 i = 0; i < MAX_MOTORS; i++)
-        {
-                if (config->motors[i].name != nullptr)
+                if (DEVICE_CATALOG[i].type == type)
                 {
-                        count++;
+                        return &DEVICE_CATALOG[i];
                 }
+        }
+        return nullptr;
+}
+
+const char *DeviceConfigurations::getName(DeviceType type)
+{
+        const DeviceDefinition *def = getDefinition(type);
+        return def ? def->name : "UNKNOWN";
+}
+
+CommandSet DeviceConfigurations::getMergedCommandSet(DeviceType type)
+{
+        CommandSet merged = makeCommandSet({CORE_HELLO, CORE_ACK, CORE_PING, CORE_RESET});
+
+        const DeviceDefinition *def = getDefinition(type);
+        if (def)
+        {
+                for (u8 i = 0; i < def->config.commands.count; i++)
+                {
+                        if (merged.count < MAX_COMMANDS)
+                        {
+                                merged.cmds[merged.count++] = def->config.commands.cmds[i];
+                        }
+                }
+        }
+        return merged;
+}
+
+u8 DeviceConfigurations::getMotorCount(DeviceType type)
+{
+        const DeviceDefinition *def = getDefinition(type);
+        if (!def)
+                return 0;
+
+        u8 count = 0;
+        for (int i = 0; i < MAX_MOTORS; i++)
+        {
+                if (def->config.motorNames[i] != nullptr)
+                        count++;
         }
         return count;
 }
 
-/************************* getCommandSet **********************************
- * Get device-specific command set pointer.
- ***************************************************************/
-const CommandSet *DeviceConfigurations::getCommandSet(u8 deviceType)
+const char *DeviceConfigurations::getKeyName(DeviceType type, u8 keyIndex)
 {
-        const DeviceConfig *config = getConfig(deviceType);
-        return config ? &config->commands : nullptr;
+        const DeviceDefinition *def = getDefinition(type);
+        if (def && keyIndex < MAX_KEYS && def->config.keyNames[keyIndex] != nullptr)
+        {
+                return def->config.keyNames[keyIndex];
+        }
+
+        // Default names if not specified
+        static char defaultName[4];
+        if (keyIndex < 10)
+                snprintf(defaultName, sizeof(defaultName), "%d", keyIndex);
+        else
+                snprintf(defaultName, sizeof(defaultName), "%c", 'A' + (keyIndex - 10));
+        return defaultName;
 }
 
-/************************* getMergedCommandSet *****************************
- * Merge common and device-specific commands.
- ***************************************************************/
-CommandSet DeviceConfigurations::getMergedCommandSet(u8 deviceType)
+const char *DeviceConfigurations::getMotorName(DeviceType type, u8 motorIndex)
 {
-        CommandSet merged{};
-
-        // Start with common commands
-        u8 idx = 0;
-        for (u8 i = 0; i < kCommonCommands.count && idx < MAX_COMMANDS; ++i)
+        const DeviceDefinition *def = getDefinition(type);
+        if (def && motorIndex < MAX_MOTORS && def->config.motorNames[motorIndex] != nullptr)
         {
-                merged.cmds[idx++] = kCommonCommands.cmds[i];
+                return def->config.motorNames[motorIndex];
         }
-
-        // Append device-specific commands
-        const CommandSet *deviceCmds = getCommandSet(deviceType);
-        if (deviceCmds)
-        {
-                for (u8 i = 0; i < deviceCmds->count && idx < MAX_COMMANDS; ++i)
-                {
-                        merged.cmds[idx++] = deviceCmds->cmds[i];
-                }
-        }
-
-        merged.count = idx;
-        return merged;
+        return "Motor";
 }
 
-/************************* getKeyName *************************************
- * Get custom key name for a type/index (nullable).
- ***************************************************************/
-const char *DeviceConfigurations::getKeyName(u8 deviceType, u8 keyIndex)
+void DeviceConfigurations::printConfig(DeviceType type)
 {
-        if (keyIndex >= MAX_KEYS)
+        const DeviceDefinition *def = getDefinition(type);
+        if (!def)
         {
-                return nullptr;
-        }
-
-        const DeviceConfig *config = getConfig(deviceType);
-        if (!config)
-        {
-                return nullptr;
-        }
-
-        return config->keys[keyIndex].name;
-}
-
-/************************* getMotorName ***********************************
- * Get motor name for a type/index (nullable).
- ***************************************************************/
-const char *DeviceConfigurations::getMotorName(u8 deviceType, u8 motorIndex)
-{
-        if (motorIndex >= MAX_MOTORS)
-        {
-                return nullptr;
-        }
-
-        const DeviceConfig *config = getConfig(deviceType);
-        if (!config)
-        {
-                return nullptr;
-        }
-
-        return config->motors[motorIndex].name;
-}
-
-/************************* printConfig ************************************
- * Print detailed config for a device type.
- ***************************************************************/
-void DeviceConfigurations::printConfig(u8 deviceType)
-{
-        const DeviceConfig *config = getConfig(deviceType);
-        if (!config)
-        {
-                Serial.println("ERROR: Invalid device type");
+                Serial.printf("Device Type %d: [UNDEFINED]\n", type);
                 return;
         }
 
-        Serial.println("========================================");
-        Serial.print("Device Type: ");
-        Serial.print(deviceType);
-        Serial.print(" (");
-        Serial.print(getDeviceName(deviceType));
-        Serial.println(")");
-        Serial.println("========================================");
+        Serial.printf("Device Type %d: %s\n", def->type, def->name);
+        Serial.printf("  - LEDs/Cells: %d\n", def->config.cellCount);
 
-        // Cell count (LEDs)
-        Serial.print("LED Cells: ");
-        Serial.println(config->cellCount);
-
-        // Keys (show custom names if any)
-        Serial.print("Custom Key Names: ");
-        u8 customKeyCount = 0;
-        for (u8 i = 0; i < MAX_KEYS; i++)
+        // Print Commands
+        Serial.print("  - Cmds: ");
+        for (u8 i = 0; i < def->config.commands.count; i++)
         {
-                if (config->keys[i].name != nullptr)
-                {
-                        customKeyCount++;
-                }
+                Serial.printf("0x%02X ", def->config.commands.cmds[i]);
         }
-        Serial.println(customKeyCount);
-        for (u8 i = 0; i < MAX_KEYS; i++)
-        {
-                if (config->keys[i].name != nullptr)
-                {
-                        Serial.print("  Key ");
-                        Serial.print(i);
-                        Serial.print(": ");
-                        Serial.println(config->keys[i].name);
-                }
-        }
-
-        // Motors
-        u8 motorCount = getMotorCount(deviceType);
-        Serial.print("Motors: ");
-        Serial.println(motorCount);
-        for (u8 i = 0; i < MAX_MOTORS; i++)
-        {
-                if (config->motors[i].name != nullptr)
-                {
-                        Serial.print("  Motor ");
-                        Serial.print(i);
-                        Serial.print(": ");
-                        Serial.println(config->motors[i].name);
-                }
-        }
-
-        Serial.println("========================================\n");
-}
-
-/************************* printHardwareConfig *****************************
- * Print concise hardware config with optional indent.
- ***************************************************************/
-void DeviceConfigurations::printHardwareConfig(u8 deviceType, const char *indent)
-{
-        if (deviceType >= MAX_DEVICE_TYPES)
-        {
-                Serial.print(indent);
-                Serial.println("INVALID DEVICE TYPE");
-                return;
-        }
-
-        const DeviceConfig *config = getConfig(deviceType);
-        if (!config)
-        {
-                Serial.print(indent);
-                Serial.println("Configuration not found");
-                return;
-        }
-
-        // Cell count
-        Serial.print(indent);
-        Serial.print("LED Cells:     ");
-        Serial.println(config->cellCount);
-
-        // Motors
-        u8 motorCount = getMotorCount(deviceType);
-        Serial.print(indent);
-        Serial.print("Motors:        ");
-        Serial.println(motorCount);
-
-        for (u8 i = 0; i < MAX_MOTORS; i++)
-        {
-                const char *motorName = getMotorName(deviceType, i);
-                if (motorName != nullptr)
-                {
-                        Serial.print(indent);
-                        Serial.print("  Motor ");
-                        Serial.print(i);
-                        Serial.print(":     ");
-                        Serial.println(motorName);
-                }
-        }
-
-        // Custom key names (if any)
-        u8 customKeyCount = 0;
-        for (u8 i = 0; i < MAX_KEYS; i++)
-        {
-                const char *keyName = getKeyName(deviceType, i);
-                if (keyName != nullptr)
-                {
-                        customKeyCount++;
-                }
-        }
-
-        if (customKeyCount > 0)
-        {
-                Serial.print(indent);
-                Serial.print("Custom Keys:   ");
-                Serial.println(customKeyCount);
-
-                for (u8 i = 0; i < MAX_KEYS; i++)
-                {
-                        const char *keyName = getKeyName(deviceType, i);
-                        if (keyName != nullptr)
-                        {
-                                Serial.print(indent);
-                                Serial.print("  Key ");
-                                Serial.print(i);
-                                Serial.print(":      ");
-                                Serial.println(keyName);
-                        }
-                }
-        }
+        Serial.println();
 }

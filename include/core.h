@@ -10,6 +10,8 @@
 #include "mcupins.h"
 #include "ioexpander.h" // For KEYPAD_SIZE
 #include "matrixpanel.h"
+#include "app_base.h"
+#include "deviceconfig.h"
 #include <Preferences.h>
 
 #define PIXEL_BRIGHTNESS 5
@@ -62,13 +64,13 @@ public:
         void setMode(CoreMode mode);
         CoreMode getMode() const { return m_mode; }
 
-        // Get device type (0-31 from trimmer pot ADC)
-        u8 getDeviceType() const { return m_deviceType; }
+        // Get device address (0-31 from trimmer pot ADC)
+        u8 getAddress() const { return m_address; }
+
+        // Get resolved device type (from address map)
+        DeviceType getDeviceType() const { return m_type; }
 
         // Get device type name string
-        // Note: These are placeholder names at firmware level.
-        // High-level App code can override these by implementing its own
-        // type name lookup based on getDeviceType() for application-specific naming.
         const char *getDeviceTypeName() const;
 
         // Print boot report showing device configuration
@@ -96,11 +98,13 @@ private:
         RoomSerial *m_roomBus;
         IOExpander *m_ioExpander;
         MatrixPanel *m_matrixPanel; // Keypad+LED matrix abstraction
+        AppBase *m_app;             // Current application instance
 
         // Core state
         CoreMode m_mode;
         int m_colorIndex;
-        u8 m_deviceType;       // Device type (0-31) stored in NVS, calibrated via ADC
+        u8 m_address;          // Device address (assigned by server, stored in NVS)
+        DeviceType m_type;     // Device type (configured by pot, stored in NVS)
         bool m_pixelCheckDone; // Track if pixel check has been performed
 
         // Keypad test mode state
@@ -141,15 +145,21 @@ private:
         void handleRoomBusFrame(const RoomFrame &frame);
 
         // Configuration
-        u8 readDeviceType(bool verbose = true);
+        u8 readDeviceType(bool verbose = true); // Read from Pot
         void saveDeviceType(u8 type);
         u8 loadDeviceType();
-        void clearStoredDeviceType(); // Factory reset
+
+        void saveAddress(u8 address);
+        u8 loadAddress();
+        void clearStoredConfig(); // Factory reset (clears both)
 
         // Type detection mode
         void enterTypeDetectionMode();
         void exitTypeDetectionMode();
         void updateTypeDetectionMode();
+
+        // Helper to send HELLO
+        void sendHello();
 
         // Keypad test mode
         void enterKeypadTestMode();

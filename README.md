@@ -14,6 +14,29 @@ This firmware runs on ESP32-C3 microcontrollers and provides a complete, product
 -   **Persistent Storage**: NVS (Non-Volatile Storage) for device configuration
 -   **Status LED**: Visual feedback for system health (OK/I2C-ERROR/TYPE-ERROR)
 
+## Configuration Model (New)
+
+The system uses a split configuration model to support multiple devices of the same type in a single room.
+
+### 1. Device Type (Factory Config)
+
+-   **What:** Defines the hardware capabilities and application logic (e.g., Purger, Timer, Keypad).
+-   **How:** Configured via the **Potentiometer** (Trimmer).
+-   **Storage:** Saved in NVS key `deviceType`.
+-   **Calibration:** Long-press the boot button to enter **Type Detection Mode**. Adjust the pot to select the type. The setting is permanent until recalibrated.
+
+### 2. Device Address (Room Setup)
+
+-   **What:** Unique logical identifier on the RS-485 bus.
+-   **Range:** `0x02` - `0xFD` (252 possible devices).
+-   **Reserved:**
+    -   `0x00`: Unassigned (Factory Default)
+    -   `0x01`: Server (Master Controller)
+    -   `0xFE`: Broadcast (All Devices)
+-   **How:** Assigned by the **Server** during the room setup phase.
+-   **Storage:** Saved in NVS key `address`.
+-   **Default:** `0x00` (ADDR_UNASSIGNED) on first boot or factory reset.
+
 ## Features
 
 ### Core Firmware Capabilities
@@ -31,7 +54,7 @@ This firmware runs on ESP32-C3 microcontrollers and provides a complete, product
 
 -   **I/O Expansion:** PCF8575 16-bit I2C expander for keypad, motors, and switches
 -   **Keypad:** 4x4 matrix with hardware debouncing (16 keys)
--   **Motors:** Dual H-bridge motor control (2 motors)
+-   **Motors:** Dual H-bridge motor control (up to 4 motors)
 -   **Switches:** 4 digital inputs with pull-ups
 -   **LEDs:** WS2812B RGB strip with animation system
 -   **Audio:** PWM-based synthesizer with ADSR envelope
@@ -68,7 +91,7 @@ This firmware runs on ESP32-C3 microcontrollers and provides a complete, product
 ### Optional Components
 
 -   4x4 Matrix Keypad
--   Motors (up to 2 via H-bridge)
+-   Motors (up to 4 via H-bridge)
 -   Switches/Sensors (up to 4)
 
 ## Pin Configuration
@@ -95,356 +118,76 @@ This firmware runs on ESP32-C3 microcontrollers and provides a complete, product
 
 **PCF8575 Pin Mapping:**
 
--   P00-P03: Keypad rows
--   P04-P07: Keypad columns
--   P10-P11: Motor 1 (MOT1A, MOT1B)
--   P12-P13: Motor 2 (MOT2A, MOT2B)
--   P14-P17: Switches 1-4
+-   P00-P07: Motor Control (8 pins for 4 motors via H-bridge)
+    -   P00-P01: Motor A
+    -   P02-P03: Motor B
+    -   P04-P05: Motor C
+    -   P06-P07: Motor D
+-   P10-P17: Keypad Matrix (8 pins)
+    -   P10-P13: Columns
+    -   P14-P17: Rows
 
-See `include/mcupins.h` for complete pin definitions.
+## Protocol Details (RS-485)
 
-## Quick Start
+### Frame Format (28 bytes)
+
+```
+[0]      START (0xAA)
+[1-24]   PAYLOAD (24 bytes):
+         [0]     addr (Destination)
+         [1]     cmd_srv (Server Command)
+         [2]     cmd_dev (Device Event)
+         [3-22]  p[0-19] (Parameters)
+         [23]    reserved
+[25-26]  CRC16-CCITT
+[27]     END (0x55)
+```
+
+### Key Commands
+
+-   **HELLO (0x01):** Device -> Server. Payload: `[Address, Type]`. Sent on boot.
+-   **SET_ADDRESS (0x05):** Server -> Device. Payload: `[New Address]`. Assigns logical address.
+
+## Getting Started
+
+### Prerequisites
+
+-   **VS Code**: [Download here](https://code.visualstudio.com/)
+-   **PlatformIO Extension**: Install the "PlatformIO IDE" extension in VS Code.
+-   **Git**: Ensure Git is installed on your system.
 
 ### Installation
 
-1. Install [PlatformIO](https://platformio.org/)
-2. Clone this repository:
+1.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/SamiaMehrdad/rescape-client-mcu.git
-    cd rescape-client-mcu
+    git clone <repository-url>
+    cd client-mcu
     ```
-3. Build and upload:
-    ```bash
-    platformio run --target upload
-    ```
-4. Monitor serial output:
-    ```bash
-    platformio device monitor
-    ```
-
-### First Boot Configuration
-
-1. **Hardware Setup:**
-
-    - Connect 20kΩ trimmer pot between 3.3V and GND
-    - Connect wiper to GPIO 2 (CONFIG_ADC_PIN)
-    - Connect status LED to GPIO 3 (STATUS_LED_PIN)
-
-2. **Device Type Calibration:**
-
-    - Power on device - it will read ADC and assign initial type
-    - Long-press boot button (GPIO 9) to enter calibration mode
-    - Adjust trimmer pot to select desired type (0-31)
-    - LED flashes every 0.5 seconds with beep
-    - Serial monitor shows type changes in real-time
-    - Long-press boot button again to save and exit
-
-3. **Boot Report:**
-    - Device displays comprehensive boot report showing:
-        - Device type and configuration status
-        - Hardware info (board, chip, MAC address)
-        - Firmware version and build date
+2.  **Open in VS Code:**
+    -   Open VS Code.
+    -   File -> Open Folder -> Select the `client-mcu` folder.
+    -   Wait for PlatformIO to initialize (it may download toolchains automatically).
 
 ### Configuration
 
-Edit `src/main.cpp` to configure hardware parameters:
+The project uses `platformio.ini` for configuration. The default environment is set to `seeed_xiao_esp32c3`.
 
-```cpp
-// LED strip configuration
-PixelStrip pixels(PIXEL_PIN, 8, 1, 5);  // pin, count, groupSize, brightness
-
-// Timer configuration
-constexpr u8 ISR_INTERVAL_MS = 5;    // ISR frequency (200 Hz)
-constexpr u8 ANIM_REFRESH_MS = 40;   // Display update rate (25 Hz)
-```
-
-Device type behavior is defined in `src/core.cpp` - override in App layer for custom logic.
-
-## Project Structure
-
-```
-rescape-client-mcu/
-├── include/              # Header files
-│   ├── core.h           # Core firmware (device type, modes, NVS)
-│   ├── app.h            # Application layer (reserved for high-level logic)
-│   ├── animation.h      # LED animation system
-│   ├── inputmanager.h   # Unified input event handling
-│   ├── buttons.h        # Button debouncing
-│   ├── colors.h         # RGB color definitions
-│   ├── esptimer.h       # Hardware timer library
-│   ├── ioexpander.h     # PCF8575 I/O expander
-│   ├── mcupins.h        # Pin definitions (board-specific)
-│   ├── pixel.h          # WS2812B LED control
-│   ├── roombus.h        # Room Bus protocol
-│   ├── roomserial.h     # RS-485 communication
-│   ├── synth.h          # Audio synthesizer
-│   └── watchdog.h       # Watchdog timer
-├── src/                 # Implementation files
-│   ├── core.cpp         # Core firmware implementation
-│   ├── app.cpp          # Application layer
-│   ├── animation.cpp    # Animation engine
-│   ├── inputmanager.cpp # Input handling
-│   ├── buttons.cpp      # Button logic
-│   ├── esptimer.cpp     # Timer implementation
-│   ├── ioexpander.cpp   # I/O expander driver
-│   ├── main.cpp         # Arduino entry point
-│   ├── pixel.cpp        # LED control
-│   ├── roomserial.cpp   # Communication driver
-│   ├── synth.cpp        # Audio synthesis
-│   └── watchdog.cpp     # Watchdog implementation
-├── platformio.ini       # PlatformIO configuration
-├── README.md            # This file
-└── docs/                # Documentation
-    ├── 64_TYPE_EXPANSION.md              # Future 64-type expansion
-    ├── DEVICE_TYPE_SYSTEM_COMPLETE.md    # Complete type system docs
-    ├── STATUS_LED.md                     # Status LED feature
-    ├── TYPE_DETECTION_MODE.md            # Calibration mode
-    ├── HARDWARE_DESIGN.md                # Hardware requirements
-    ├── BUILD_FIXES.md                    # Build troubleshooting
-    ├── DEVICE_TYPE_ARCHITECTURE.md       # Core + App architecture
-    ├── NVS_DEVICE_TYPE_STORAGE.md        # NVS persistent storage
-    ├── EDGE_CASE_HANDLING.md             # Error scenarios
-    ├── BOOT_REPORT.md                    # Boot report feature
-    └── RS485_USAGE.md                    # RS-485 communication
-```
-
-## Core Firmware Modes
-
-The system operates in four distinct modes:
-
-1. **INTERACTIVE** - Direct user control via buttons/keypad
-2. **ANIMATION** - Automated LED animations
-3. **REMOTE** - Control via Room Bus network commands
-4. **TYPE_DETECTION** - Device type calibration mode
-
-Switch between modes using button presses or Room Bus commands.
-
-## Device Type System
-
-### Overview
-
-Each device can be configured as one of 32 types (0-31, expandable to 64) using a trimmer potentiometer:
-
--   **TYPE_00 to TYPE_31**: Currently implemented
--   **TYPE_32 to TYPE_63**: Reserved for future expansion
-
-### Hardware Configuration
-
-1. Connect 20kΩ multi-turn trimmer pot:
-
-    - Pin 1 → GND
-    - Pin 2 (wiper) → GPIO 2 (CONFIG_ADC_PIN)
-    - Pin 3 → 3.3V
-
-2. ADC Mapping:
-    - ADC 0-63 → TYPE_00
-    - ADC 64-127 → TYPE_01
-    - ...
-    - ADC 1984-2047 → TYPE_31
-    - Step size: 64 ADC units per type
-
-### Calibration Mode
-
-Enter calibration mode by long-pressing the boot button:
-
-1. LED turns off, system ready for configuration
-2. Adjust trimmer pot to select type
-3. LED flashes + beeps every 0.5 seconds
-4. Serial monitor shows current type
-5. Long-press boot button to save to NVS
-
-### Edge Cases Handled
-
-✅ Disconnected potentiometer detection (ADC < 30)  
-✅ Noisy connection detection (ADC range > 200)  
-✅ Invalid readings don't overwrite stored type  
-✅ Type preserved if calibration fails  
-✅ Automatic restore on error
-
-## Development Guide
-
-### Adding New Device Types
-
-Device types are defined in `src/core.cpp`:
-
-```cpp
-const char *Core::kDeviceTypeNames[64] = {
-    "TYPE_00", "TYPE_01", ... "TYPE_63"
-};
-```
-
-To add application-specific behavior:
-
-1. Check device type in App layer:
-
-    ```cpp
-    u8 type = core.getDeviceType();
-    if (type == 5) {
-        // Custom logic for TYPE_05
-    }
-    ```
-
-2. Override type names in App layer:
-    ```cpp
-    const char* getCustomTypeName(u8 type) {
-        switch(type) {
-            case 0: return "PUZZLE_LOCK";
-            case 1: return "DOOR_SENSOR";
-            ...
-        }
-    }
-    ```
-
-### Core + App Architecture
-
-**Core Layer** (`core.h/cpp`):
-
--   Hardware abstraction
--   Device type management
--   NVS storage
--   Status monitoring
--   Low-level I/O
-
-**App Layer** (`app.h/cpp`, reserved):
-
--   Puzzle-specific logic
--   Game state management
--   High-level behavior
--   Custom type definitions
-
-This separation allows Core firmware to remain stable while App logic evolves. │ ├── pixel.cpp │ ├── roomserial.cpp │ ├── synth.cpp │ └── watchdog.cpp ├── lib/ # External libraries ├── test/ # Unit tests ├── platformio.ini # Build configuration ├── CHANGELOG.md # Development history └── README.md # This file
-
-````
-
-## Library Documentation
-
-### ESPTimer
-
-Simplified hardware timer management:
-
-```cpp
-#include "esptimer.h"
-
-void IRAM_ATTR myCallback() {
-  // Timer ISR code
-}
-
-hw_timer_t *timer = ESPTimer::begin(0, 10, &myCallback);  // 10ms timer
-// Use `ESPTimer` returned handle as needed. start/stop APIs removed.
-````
-
-### IOExpander
-
-I2C I/O expander with debouncing:
-
-```cpp
-#include "ioexpander.h"
-
-IOExpander io(0x20, &Wire);
-io.begin();
-
-u8 key = io.scanKeypad();        // Returns 0-15 or 255
-bool sw = io.readSwitch1();
-io.setMotorA(MOTOR_FORWARD);
-```
-
-### PixelStrip
-
-LED animation system:
-
-```cpp
-#include "pixel.h"
-
-PixelStrip pixels(PIN, 10, 4, 50);  // 10 logical pixels, 4 LEDs each
-pixels.begin();
-
-// Direct control
-pixels.setColor(0, CLR_RD);
-pixels.show();
-
-// Animation via buffer
-u32 *buffer = pixels.getBuffer();
-buffer[5] = CLR_BL;
-pixels.applyBuffer();  // Called from ISR or loop
-```
-
-### Synth
-
-Audio synthesis:
-
-```cpp
-#include "synth.h"
-
-Synth synth(SPKR_PIN, PWM_CHANNEL);
-synth.begin(20000);
-synth.setWaveform(WAVE_SINE);
-synth.setADSR(5, 120, 100, 180);
-synth.playNote(NOTE_C4, 300, 100);
-```
-
-## Room Bus Protocol
-
-The Room Bus is an RS-485 network protocol for coordinating multiple escape room devices.
-
-**Frame Structure:**
-
--   Address: Device identifier
--   Command: Service/device command codes
--   Parameters: Up to 10 bytes
-
-See `include/roombus.h` for protocol details.
-
-## Performance
-
--   **ISR Execution:** < 100μs (button update + flag set)
--   **I2C Speed:** 100 kHz (reliable, no errors)
--   **Keypad Scan:** ~100 Hz with 30ms debounce
--   **LED Updates:** Configurable (default 25 Hz)
--   **Animation Rate:** Configurable (default 20 Hz)
+-   **Dependencies:** PlatformIO will automatically install required libraries listed in `lib_deps`.
+-   **Upload Port:** PlatformIO usually auto-detects the port. If not, specify `upload_port` in `platformio.ini`.
 
 ## Development
 
+### Adding a New Device App
+
+1.  Create `src/apps/app_mydevice.h` inheriting from `AppBase`.
+2.  Implement `setup()`, `loop()`, `handleInput()`, `handleCommand()`.
+3.  Register in `src/apps/app_factory.cpp`.
+
 ### Building
 
+Use PlatformIO:
+
 ```bash
-# Build
 pio run
-
-# Upload
-pio run -t upload
-
-# Monitor
-pio device monitor
-
-# Clean
-pio run -t clean
+pio run --target upload
 ```
-
-### Debugging
-
-Serial output at 115200 baud. I2C debug spam is disabled via:
-
-```cpp
-esp_log_level_set("i2c", ESP_LOG_NONE);
-```
-
-## License
-
-[Add your license here]
-
-## Contributors
-
--   MSK - November 2025
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for detailed development history.
-
-## Support
-
-[Add support/contact information]
-
----
-
-**Version:** 1.0.0  
-**Last Updated:** November 29, 2025

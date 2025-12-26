@@ -36,7 +36,7 @@ export interface RoomFrame {
 }
 
 // ---------- Device Types ----------
-// Should match DEVICE_TYPE_LIST in deviceconfig.h
+// Should match DeviceType enum in deviceconfig.h
 export enum DeviceType {
     Terminal = 0,
     GlowButton = 1,
@@ -45,7 +45,7 @@ export enum DeviceType {
     GlowDots = 4,
     QB = 5,
     RGBMixer = 6,
-    Bomb = 7,
+    Purger = 7,
     FinalOrder = 8,
     BallGate = 9,
     Actuator = 10,
@@ -91,8 +91,8 @@ export enum RoomServerCommand {
     // Terminal
     TERM_RESET = 0x40,
 
-    // Bomb
-    BOMB_SET_STATE = 0x40,
+    // Purger
+    PURGER_SET_STATE = 0x40,
 
     // Screen
     SCR_LOAD = 0x40,

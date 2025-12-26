@@ -7,6 +7,7 @@
 
 #include "core.h"
 #include "deviceconfig.h"
+#include "app_base.h"
 #include <Arduino.h>
 #include "mcupins.h"
 #include "buttons.h"
@@ -39,7 +40,7 @@ namespace ADCConfig
         constexpr int SAMPLE_DELAY_US = 100;     // Delay between ADC samples (microseconds)
 }
 
-// Instruction: add new device types in DEVICE_TYPE_LIST and kConfigs (deviceconfig.*);
+// Instruction: add new device types in ALL_DEVICES (deviceconfig.cpp) and DeviceType enum (deviceconfig.h);
 // bump MAX_CURRENT_TYPE if you want the potentiometer map to expose IDs above 31.
 // Device type limits
 namespace TypeLimits
@@ -98,9 +99,11 @@ Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
       m_roomBus(roomBus),
       m_ioExpander(ioExpander),
       m_matrixPanel(new MatrixPanel(pixels)), // Initialize matrix panel
+      m_app(nullptr),
       m_mode(MODE_INTERACTIVE),
       m_colorIndex(0),
-      m_deviceType(0),
+      m_address(0),
+      m_type(TERMINAL),
       m_pixelCheckDone(false),
       m_statusLedMode(STATUS_OK),
       m_lastLedToggle(0),
@@ -198,28 +201,51 @@ void Core::init()
         // Initialize NVS (Non-Volatile Storage)
         m_preferences.begin("core", false); // namespace: "core", readonly: false
 
-        // Try to load device type from NVS first
-        m_deviceType = loadDeviceType();
-
-        if (m_deviceType == 0xFF) // 0xFF means not found in NVS
+        // 1. Load Device Type (Factory Config)
+        u8 typeVal = loadDeviceType();
+        if (typeVal == 0xFF)
         {
-                // First boot or factory reset - read from ADC and save
-                m_deviceType = readDeviceType();
-
-                if (m_deviceType == 0xFF)
+                // First boot - read from ADC
+                typeVal = readDeviceType();
+                if (typeVal == 0xFF)
                 {
-                        // Potentiometer disconnected or invalid reading
                         Serial.println("⚠️  WARNING: Cannot read device type from ADC!");
-                        Serial.println("   Please check potentiometer connection.");
-                        m_deviceType = 0;                    // Temporary default
-                        m_statusLedMode = STATUS_TYPE_ERROR; // Show error on LED
+                        typeVal = 0; // Default
+                        m_statusLedMode = STATUS_TYPE_ERROR;
                 }
                 else
                 {
-                        // Valid reading - save it
-                        saveDeviceType(m_deviceType);
+                        saveDeviceType(typeVal);
                 }
         }
+        m_type = (DeviceType)typeVal;
+
+        // 2. Load Device Address (Room Setup)
+        m_address = loadAddress();
+        if (m_address == 0xFF)
+        {
+                m_address = ADDR_UNASSIGNED; // 0x00
+        }
+
+        // Initialize Application
+        m_app = AppBase::create(m_type);
+        if (m_app)
+        {
+                AppContext context = {
+                    m_pixels,
+                    m_synth,
+                    m_animation,
+                    m_inputManager,
+                    m_roomBus,
+                    m_ioExpander,
+                    m_matrixPanel,
+                    &m_address,
+                    &m_type};
+                m_app->setup(context);
+        }
+
+        // Send HELLO to server
+        sendHello();
 
         // Set up input callback
         m_inputManager->setCallback(onInputEvent);
@@ -244,6 +270,12 @@ void Core::update()
         if (m_roomBus->receiveFrame(&rxFrame))
         {
                 handleRoomBusFrame(rxFrame);
+        }
+
+        // Update Application
+        if (m_app && m_mode == MODE_INTERACTIVE)
+        {
+                m_app->loop();
         }
 }
 
@@ -348,7 +380,7 @@ u8 Core::readDeviceType(bool verbose)
                 Serial.print(" -> Type ");
                 Serial.print(deviceType);
                 Serial.print(" (");
-                Serial.print(DeviceConfigurations::getDeviceName(deviceType));
+                Serial.print(DeviceConfigurations::getName((DeviceType)deviceType));
                 Serial.println(")");
         }
 
@@ -364,23 +396,23 @@ void Core::printBootReport()
 
         // Device identification
         Serial.println("┌─ DEVICE CONFIGURATION ─────────────────────────────────────┐");
-        Serial.print("│ Device Type:       ");
+        Serial.print("│ Device Address:    ");
+        Serial.print(m_address);
+        Serial.print(" (Type: ");
         Serial.print(getDeviceTypeName());
-        Serial.print(" (Index: ");
-        Serial.print(m_deviceType);
         Serial.println(")");
 
         // Storage status
         Serial.print("│ Configuration:     ");
-        u8 storedType = m_preferences.getUChar("deviceType", 0xFF);
-        if (storedType == 0xFF)
+        u8 storedAddr = m_preferences.getUChar("address", 0xFF);
+        if (storedAddr == 0xFF)
         {
                 Serial.println("Not saved (temporary)");
         }
         else
         {
                 Serial.print("Stored in NVS");
-                if (storedType != m_deviceType)
+                if (storedAddr != m_address)
                 {
                         Serial.print(" (warning: mismatch!)");
                 }
@@ -390,7 +422,7 @@ void Core::printBootReport()
         // Device hardware configuration
         Serial.println("│");
         Serial.println("│ Hardware Config:");
-        DeviceConfigurations::printHardwareConfig(m_deviceType, "│   ");
+        DeviceConfigurations::printConfig(m_type);
 
         // Mode status
         Serial.print("│ Operating Mode:    ");
@@ -483,34 +515,70 @@ void Core::printBootReport()
         Serial.println();
 }
 
-void Core::saveDeviceType(u8 type)
+void Core::saveAddress(u8 address)
 {
         using namespace TypeLimits;
 
         // Validate and clamp to valid range
-        if (type > MAX_CURRENT_TYPE && type != INVALID_TYPE)
+        if (address > MAX_CURRENT_TYPE && address != INVALID_TYPE)
         {
-                Serial.print("WARNING: Device type ");
-                Serial.print(type);
+                Serial.print("WARNING: Device address ");
+                Serial.print(address);
                 Serial.print(" out of range. Clamping to ");
                 Serial.println(MAX_CURRENT_TYPE);
-                type = MAX_CURRENT_TYPE;
+                address = MAX_CURRENT_TYPE;
         }
 
-        // Don't save invalid type
-        if (type == INVALID_TYPE)
+        // Don't save invalid address
+        if (address == INVALID_TYPE)
         {
-                Serial.println("ERROR: Cannot save invalid device type to NVS.");
+                Serial.println("ERROR: Cannot save invalid device address to NVS.");
                 return;
         }
 
         // Save to NVS
-        size_t bytesWritten = m_preferences.putUChar("deviceType", type);
+        size_t bytesWritten = m_preferences.putUChar("address", address);
         if (bytesWritten == 0)
         {
-                Serial.println("ERROR: Failed to save device type to NVS!");
+                Serial.println("ERROR: Failed to save device address to NVS!");
         }
         else
+        {
+                Serial.print("Device address ");
+                Serial.print(address);
+                Serial.println(" saved to NVS.");
+        }
+}
+
+u8 Core::loadAddress()
+{
+        using namespace TypeLimits;
+
+        // Returns INVALID_TYPE (0xFF) if key doesn't exist (first boot or after factory reset)
+        u8 address = m_preferences.getUChar("address", INVALID_TYPE);
+
+        // Validate loaded address
+        if (address != INVALID_TYPE && address > MAX_CURRENT_TYPE)
+        {
+                Serial.print("WARNING: Loaded invalid device address ");
+                Serial.print(address);
+                Serial.println(" from NVS. Treating as unconfigured.");
+                return INVALID_TYPE;
+        }
+
+        return address;
+}
+
+void Core::saveDeviceType(u8 type)
+{
+        using namespace TypeLimits;
+        if (type > MAX_CURRENT_TYPE && type != INVALID_TYPE)
+                type = MAX_CURRENT_TYPE;
+        if (type == INVALID_TYPE)
+                return;
+
+        size_t bytesWritten = m_preferences.putUChar("deviceType", type);
+        if (bytesWritten > 0)
         {
                 Serial.print("Device type ");
                 Serial.print(type);
@@ -521,45 +589,22 @@ void Core::saveDeviceType(u8 type)
 u8 Core::loadDeviceType()
 {
         using namespace TypeLimits;
-
-        // Returns INVALID_TYPE (0xFF) if key doesn't exist (first boot or after factory reset)
         u8 type = m_preferences.getUChar("deviceType", INVALID_TYPE);
-
-        // Validate loaded type
         if (type != INVALID_TYPE && type > MAX_CURRENT_TYPE)
-        {
-                Serial.print("WARNING: Loaded invalid device type ");
-                Serial.print(type);
-                Serial.println(" from NVS. Treating as unconfigured.");
                 return INVALID_TYPE;
-        }
-
         return type;
 }
 
-void Core::clearStoredDeviceType()
+void Core::clearStoredConfig()
 {
-        bool success = m_preferences.remove("deviceType");
-        if (success)
-        {
-                Serial.println("Stored device type cleared (factory reset).");
-                Serial.println("Reboot to read device type from ADC.");
-        }
-        else
-        {
-                Serial.println("WARNING: Failed to clear device type from NVS.");
-        }
+        m_preferences.remove("address");
+        m_preferences.remove("deviceType");
+        Serial.println("Stored config cleared (factory reset).");
 }
 
 const char *Core::getDeviceTypeName() const
 {
-        using namespace TypeLimits;
-
-        // Ensure device type is in valid range
-        if (m_deviceType > MAX_FUTURE_TYPE)
-                return "INVALID";
-
-        return DeviceConfigurations::getDeviceName(m_deviceType);
+        return DeviceConfigurations::getName(m_type);
 }
 
 //============================================================================
@@ -625,14 +670,35 @@ void Core::onInputEvent(InputEvent event)
 
 void Core::handleInputEvent(InputEvent event)
 {
+        // System-wide overrides
+        if (event == INPUT_BTN1_LONG_PRESS)
+        {
+                handleButtonLongPress();
+                return;
+        }
+
+        // Mode-specific handling
+        if (m_mode == MODE_KEYPAD_TEST)
+        {
+                if (event >= INPUT_KEYPAD_0 && event <= INPUT_KEYPAD_15)
+                {
+                        handleKeypadTestPress(m_inputManager->getKeypadNote(event));
+                }
+                return;
+        }
+
+        // Application handling (Normal Operation)
+        if (m_app && m_mode == MODE_INTERACTIVE)
+        {
+                m_app->handleInput(event);
+                return;
+        }
+
+        // Legacy/Fallback handling (if no app or not interactive)
         switch (event)
         {
         case INPUT_BTN1_PRESS:
                 handleButton1Press();
-                break;
-
-        case INPUT_BTN1_LONG_PRESS:
-                handleButtonLongPress();
                 break;
 
         case INPUT_KEYPAD_0:
@@ -651,15 +717,7 @@ void Core::handleInputEvent(InputEvent event)
         case INPUT_KEYPAD_13:
         case INPUT_KEYPAD_14:
         case INPUT_KEYPAD_15:
-                // In keypad test mode, toggle LED instead of playing note
-                if (m_mode == MODE_KEYPAD_TEST)
-                {
-                        handleKeypadTestPress(m_inputManager->getKeypadNote(event));
-                }
-                else
-                {
-                        handleKeypadPress(m_inputManager->getKeypadNote(event));
-                }
+                handleKeypadPress(m_inputManager->getKeypadNote(event));
                 break;
 
         default:
@@ -740,6 +798,22 @@ void Core::handleKeypadPress(u8 keyIndex)
 
 void Core::handleRoomBusFrame(const RoomFrame &frame)
 {
+        // Filter by address
+        // Accept if:
+        // 1. Broadcast
+        // 2. Addressed to me
+        // 3. I am unassigned (0x00) and message is for 0x00 (e.g. SET_ADDRESS)
+        bool isForMe = (frame.addr == m_address) || (frame.addr == ADDR_BROADCAST);
+
+        // Special case: If I am unassigned, I might accept assignment commands
+        if (m_address == ADDR_UNASSIGNED && frame.addr == ADDR_UNASSIGNED)
+        {
+                isForMe = true;
+        }
+
+        if (!isForMe)
+                return;
+
         Serial.print("Room Bus frame received! Addr: 0x");
         Serial.print(frame.addr, HEX);
         Serial.print(" Cmd_srv: 0x");
@@ -747,21 +821,95 @@ void Core::handleRoomBusFrame(const RoomFrame &frame)
         Serial.print(" Cmd_dev: 0x");
         Serial.println(frame.cmd_dev, HEX);
 
-        // Handle color set command
-        if (frame.cmd_srv == GLOW_SET_COLOR)
+        // 1. Handle Common Commands (Core Level)
+        switch (frame.cmd_srv)
         {
-                // Extract RGB from parameters
-                u8 r = frame.p[0];
-                u8 g = frame.p[1];
-                u8 b = frame.p[2];
-                u32 color = (r << 16) | (g << 8) | b;
+        case CORE_PING:
+                // Respond with PONG (or just ACK)
+                // TODO: Send ACK
+                Serial.println("-> PING received");
+                return; // Handled
 
-                // Stop animation and set color
-                m_animation->stop();
-                m_pixels->setAll(color);
-                m_pixels->show();
+        case CORE_RESET:
+                Serial.println("-> RESET received. Rebooting...");
+                delay(100);
+                ESP.restart();
+                return; // Handled
 
-                Serial.println("Color set via Room Bus command");
+        case CORE_HELLO:
+                // Server saying hello? Usually device says hello.
+                return;
+
+        case CORE_SET_ADDRESS:
+                // Payload[0] = New Address
+                if (frame.p[0] != 0 && frame.p[0] != 0xFF)
+                {
+                        Serial.print("-> SET_ADDRESS received: ");
+                        Serial.println(frame.p[0]);
+                        m_address = frame.p[0];
+                        saveAddress(m_address);
+                        sendHello(); // Announce new address
+                }
+                return;
+        }
+
+        // 2. Pass to Application (Device Specific)
+        if (m_app)
+        {
+                m_app->handleCommand(frame);
+        }
+}
+
+void Core::sendHello()
+{
+        if (m_roomBus)
+        {
+                RoomFrame frame;
+                // If unassigned, send from 0x00. If assigned, send from m_address.
+                // But room_frame_init_device sets addr to ADDR_SERVER (destination).
+                // The source address is not in the frame structure?
+                // Wait, RoomFrame struct has `addr` which is DESTINATION.
+                // RS-485 usually doesn't have Source Address in the frame unless payload.
+                // But the Server needs to know who sent it.
+                // Ah, `roombus.h` says:
+                // typedef struct { u8 addr; ... } RoomFrame;
+                // "addr: destination address"
+
+                // If the protocol doesn't have Source Address in the header,
+                // the device must put it in the payload or the server infers it?
+                // Usually RS-485 is Master-Slave polling.
+                // But here we have "Device -> Server events".
+                // If multiple devices talk, how does Server know who?
+                // The `RoomFrame` struct in `roombus.h` only has one `addr` field.
+                // If it's a message TO Server, `addr` is ADDR_SERVER (0x01).
+                // So the Server doesn't know the source unless it's in the payload.
+
+                // Let's put the Device Address in p[0] and Type in p[1] for HELLO?
+                // Or maybe the protocol assumes the Server polls devices?
+                // "EV_GLOW_PRESSED = 0x80" -> Device sends this.
+
+                // For HELLO, we definitely need to identify ourselves.
+
+                room_frame_init_device(&frame, CORE_HELLO);
+
+                // Payload:
+                // p[0] = My Address (so server knows who I am)
+                // p[1] = My Device Type
+
+                frame.p[0] = m_address;
+                frame.p[1] = (u8)m_type;
+
+                // If unassigned, maybe add a random ID or MAC to p[2]..p[7]?
+                if (m_address == ADDR_UNASSIGNED)
+                {
+                        uint8_t mac[6];
+                        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+                        for (int i = 0; i < 6; i++)
+                                frame.p[2 + i] = mac[i];
+                }
+
+                m_roomBus->sendFrame(&frame);
+                Serial.println("Sent HELLO to server.");
         }
 }
 
@@ -862,7 +1010,7 @@ void Core::enterTypeDetectionMode()
         m_mode = MODE_TYPE_DETECTION;
 
         // Save current device type - we'll restore this if calibration fails
-        m_typeBeforeCalibration = m_deviceType;
+        m_typeBeforeCalibration = (u8)m_type;
 
         // Stop any running animation
         if (m_animation->isActive())
@@ -872,7 +1020,7 @@ void Core::enterTypeDetectionMode()
 
         // Clear pixels
         m_pixels->clear();
-        //m_pixels->show();
+        // m_pixels->show();
 
         // Initialize type detection state
         m_lastTypeRead = millis() - READ_INTERVAL_MS + INITIAL_DELAY_MS; // Read after 500ms instead of immediate
@@ -893,18 +1041,18 @@ void Core::exitTypeDetectionMode()
         Serial.println("\n=== EXITING TYPE DETECTION MODE ===");
 
         // Check if current reading is valid before saving
-        if (m_deviceType == INVALID_TYPE)
+        if (m_type == (DeviceType)INVALID_TYPE)
         {
                 Serial.println("ERROR: Invalid device type detected!");
                 Serial.println("Potentiometer may be disconnected.");
                 Serial.println("Device type NOT CHANGED in NVS.");
 
                 // Restore the type from before calibration started
-                m_deviceType = m_typeBeforeCalibration;
+                m_type = (DeviceType)m_typeBeforeCalibration;
                 Serial.print("Restored previous type: ");
                 Serial.print(getDeviceTypeName());
                 Serial.print(" (");
-                Serial.print(m_deviceType);
+                Serial.print(m_type);
                 Serial.println(")");
         }
         else
@@ -913,10 +1061,10 @@ void Core::exitTypeDetectionMode()
                 Serial.print("Final Device Type: ");
                 Serial.print(getDeviceTypeName());
                 Serial.print(" (");
-                Serial.print(m_deviceType);
+                Serial.print(m_type);
                 Serial.println(")");
 
-                saveDeviceType(m_deviceType);
+                saveDeviceType((u8)m_type);
         }
 
         Serial.println();
@@ -971,7 +1119,7 @@ void Core::updateTypeDetectionMode()
                 else
                 {
                         // Valid reading - update device type
-                        m_deviceType = newType;
+                        m_type = (DeviceType)newType;
 
                         // Log on first valid reading or when type changes
                         if (m_lastDetectedType == INVALID_TYPE)
@@ -980,29 +1128,29 @@ void Core::updateTypeDetectionMode()
                                 Serial.print("Current type: ");
                                 Serial.print(getDeviceTypeName());
                                 Serial.print(" (");
-                                Serial.print(m_deviceType);
+                                Serial.print(m_type);
                                 Serial.println(")");
                                 Serial.println();
-                                DeviceConfigurations::printHardwareConfig(m_deviceType, "  ");
+                                DeviceConfigurations::printConfig(m_type);
                                 Serial.println();
-                                m_lastDetectedType = m_deviceType;
+                                m_lastDetectedType = (u8)m_type;
                         }
-                        else if (m_deviceType != m_lastDetectedType)
+                        else if ((u8)m_type != m_lastDetectedType)
                         {
                                 // Type changed from previous valid reading
                                 Serial.print("Type changed: ");
-                                Serial.print(DeviceConfigurations::getDeviceName(m_lastDetectedType > MAX_CURRENT_TYPE ? MAX_CURRENT_TYPE : m_lastDetectedType));
+                                Serial.print(DeviceConfigurations::getName((DeviceType)(m_lastDetectedType > MAX_CURRENT_TYPE ? MAX_CURRENT_TYPE : m_lastDetectedType)));
                                 Serial.print(" (");
                                 Serial.print(m_lastDetectedType);
                                 Serial.print(") -> ");
                                 Serial.print(getDeviceTypeName());
                                 Serial.print(" (");
-                                Serial.print(m_deviceType);
+                                Serial.print(m_type);
                                 Serial.println(")");
                                 Serial.println();
-                                DeviceConfigurations::printHardwareConfig(m_deviceType, "  ");
+                                DeviceConfigurations::printConfig(m_type);
                                 Serial.println();
-                                m_lastDetectedType = m_deviceType;
+                                m_lastDetectedType = (u8)m_type;
                         }
                         else
                         {
@@ -1038,10 +1186,6 @@ void Core::enterKeypadTestMode()
         // Stop any running animation and clear LEDs
         m_animation->stop(true);
 
-        // Turn off all LEDs
-        // m_pixels->clear();
-        //m_pixels->show();
-
         // Reset all keypad LED states
         for (int i = 0; i < 16; i++)
         {
@@ -1057,7 +1201,7 @@ void Core::exitKeypadTestMode()
 
         // Clear all LEDs
         m_pixels->clear();
-        //m_pixels->show();
+        // m_pixels->show();
 
         // Restore previous mode
         m_mode = m_previousMode;
