@@ -72,8 +72,9 @@ public:
         /**
          * @brief Handle a local input event (button press, keypad, etc.)
          * @param event The input event ID
+         * @return true if the event was consumed by the app, false to let Core handle it.
          */
-        virtual void handleInput(InputEvent event) {}
+        virtual bool handleInput(InputEvent event) { return false; }
 
         /**
          * @brief Helper to send an event to the server
@@ -104,6 +105,20 @@ public:
 
                         m_context.roomBus->sendFrame(&frame);
                 }
+        }
+
+        /**
+         * @brief Helper to get the keypad index (0-15) from an input event.
+         * @param event The input event.
+         * @return The index (0-15) or -1 if not a keypad event.
+         */
+        int getKeypadIndex(InputEvent event) const
+        {
+                if (event >= INPUT_KEYPAD_0 && event <= INPUT_KEYPAD_15)
+                {
+                        return event - INPUT_KEYPAD_0;
+                }
+                return -1;
         }
 
 protected:

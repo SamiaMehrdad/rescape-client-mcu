@@ -6,6 +6,6 @@ class AppTimer : public AppBase
 public:
         void setup(const AppContext &context) override;
         void loop() override;
-        void handleInput(InputEvent event) override;
+        bool handleInput(InputEvent event) override;
         void handleCommand(const RoomFrame &frame) override;
 };

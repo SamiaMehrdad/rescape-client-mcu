@@ -88,6 +88,11 @@ static const size_t DEVICE_COUNT = sizeof(DEVICE_CATALOG) / sizeof(DEVICE_CATALO
 // Implementation
 // =================================================================================
 
+/************************* getDefinition ***********************************
+ * Retrieves the device definition for a given device type.
+ * @param type The DeviceType to look up.
+ * @return Pointer to the DeviceDefinition, or nullptr if not found.
+ ***************************************************************/
 const DeviceDefinition *DeviceConfigurations::getDefinition(DeviceType type)
 {
         for (size_t i = 0; i < DEVICE_COUNT; i++)
@@ -100,12 +105,23 @@ const DeviceDefinition *DeviceConfigurations::getDefinition(DeviceType type)
         return nullptr;
 }
 
+/************************* getName ***********************************
+ * Gets the string name of a device type.
+ * @param type The DeviceType.
+ * @return C-string name or "UNKNOWN".
+ ***************************************************************/
 const char *DeviceConfigurations::getName(DeviceType type)
 {
         const DeviceDefinition *def = getDefinition(type);
         return def ? def->name : "UNKNOWN";
 }
 
+/************************* getMergedCommandSet ***********************************
+ * Gets the full set of commands supported by a device type.
+ * Includes both Core commands and device-specific commands.
+ * @param type The DeviceType.
+ * @return CommandSet containing all supported command IDs.
+ ***************************************************************/
 CommandSet DeviceConfigurations::getMergedCommandSet(DeviceType type)
 {
         CommandSet merged = makeCommandSet({CORE_HELLO, CORE_ACK, CORE_PING, CORE_RESET});
@@ -118,6 +134,11 @@ CommandSet DeviceConfigurations::getMergedCommandSet(DeviceType type)
                         if (merged.count < MAX_COMMANDS)
                         {
                                 merged.cmds[merged.count++] = def->config.commands.cmds[i];
+                                /************************* getMotorCount ***********************************
+                                 * Gets the number of motors used by a device type.
+                                 * @param type The DeviceType.
+                                 * @return Number of motors.
+                                 ***************************************************************/
                         }
                 }
         }
@@ -134,6 +155,12 @@ u8 DeviceConfigurations::getMotorCount(DeviceType type)
         for (int i = 0; i < MAX_MOTORS; i++)
         {
                 if (def->config.motorNames[i] != nullptr)
+                        /************************* getKeyName ***********************************
+                         * Gets the name of a specific key/button for a device type.
+                         * @param type The DeviceType.
+                         * @param keyIndex The index of the key.
+                         * @return C-string name of the key.
+                         ***************************************************************/
                         count++;
         }
         return count;
@@ -150,10 +177,20 @@ const char *DeviceConfigurations::getKeyName(DeviceType type, u8 keyIndex)
         // Default names if not specified
         static char defaultName[4];
         if (keyIndex < 10)
+                /************************* getMotorName ***********************************
+                 * Gets the name of a specific motor for a device type.
+                 * @param type The DeviceType.
+                 * @param motorIndex The index of the motor.
+                 * @return C-string name of the motor.
+                 ***************************************************************/
                 snprintf(defaultName, sizeof(defaultName), "%d", keyIndex);
         else
                 snprintf(defaultName, sizeof(defaultName), "%c", 'A' + (keyIndex - 10));
         return defaultName;
+        /************************* printConfig ***********************************
+         * Prints the configuration of a device type to Serial.
+         * @param type The DeviceType to print.
+         ***************************************************************/
 }
 
 const char *DeviceConfigurations::getMotorName(DeviceType type, u8 motorIndex)

@@ -25,7 +25,7 @@ enum Waveform
 enum SoundPreset
 {
         SOUND_PLUCK,      // Triangle wave, short percussive (guitar, harp)
-        SOUND_SOFT_PAD,   // Sine wave, gentle attack and release (pad, strings)
+        SOUND_FLUTE,      // Sine wave, gentle attack and release (pad, strings)
         SOUND_ORGAN,      // Square wave, instant attack, sustain (organ, synth)
         SOUND_PIANO,      // Triangle wave, medium attack, natural decay
         SOUND_PERCUSSION, // Noise, very short, sharp (drum, click)
@@ -43,28 +43,64 @@ struct ADSR
         u16 releaseMs;   // Release time in milliseconds
 };
 
+// Voice structure for polyphony
+struct Voice
+{
+        bool active;
+        u16 frequency;
+        u32 phaseAccumulator;
+        u32 phaseIncrement;
+
+        // ADSR State
+        enum EnvState
+        {
+                IDLE,
+                ATTACK,
+                DECAY,
+                SUSTAIN,
+                RELEASE
+        } envState;
+
+        u32 envLevel; // Fixed point 16.16 (0..255 << 16)
+
+        // Pre-calculated rates (fixed point 16.16 per sample)
+        u32 attackRate;
+        u32 decayRate;
+        u32 releaseRate;
+        u32 sustainLevelFixed;
+
+        u32 samplesUntilRelease; // Counter for note duration
+
+        u8 baseVolume;
+        Waveform waveform;
+};
+
+// Number of simultaneous polyphonic voices
+// WARNING: Increasing this increases ISR execution time.
+// On ESP32-C3 at 40kHz sample rate:
+// - 4 Channels: Safe (~30% load)
+// - 8 Channels: Likely Safe (~60% load)
+// - 16 Channels: RISKY (May trigger Watchdog or audio stutter)
+#define NUM_CHANNELS 4
+
 class Synth
 {
 private:
         u8 pin;
         u8 channel;
-        u16 sampleRate; // Samples per second
+        u8 pin2 = 8;     // GPIO8 for secondary output (default)
+        u8 channel2 = 1; // Use LEDC channel 1 for GPIO8
+        u16 sampleRate;  // Samples per second
         Waveform waveform;
         ADSR envelope;
 
         hw_timer_t *sampleTimer;
-        volatile bool playing;
-        volatile u32 sampleIndex;
-        volatile u32 totalSamples;
-        volatile u32 noteDurationMs;
-        volatile u16 frequency;
-        volatile u8 baseVolume;
 
-        // Generate waveform sample at given phase (0.0 to 1.0)
-        u8 generateSample(float phase);
+        // Polyphonic voices
+        Voice voices[NUM_CHANNELS];
 
-        // Calculate ADSR envelope amplitude (0-255) at given time
-        u8 getEnvelopeAmplitude(u32 timeMs);
+        // Generate waveform sample at given phase (0-255)
+        u8 generateSample(u8 phase, Waveform wave);
 
 public:
         Synth(u8 outputPin, u8 pwmChannel);
@@ -83,6 +119,8 @@ public:
 
         // Called by timer ISR
         void updateSample();
+        // Optionally allow custom pin/channel for secondary output in future
+        void setSecondaryOutput(u8 pin, u8 channel);
 };
 
 #endif // SYNTH_H
@@ -90,6 +128,21 @@ public:
 #define NOTES_H
 
 // Musical note frequencies
+// Octave 3
+#define NOTE_C3 131
+#define NOTE_CS3 139
+#define NOTE_D3 147
+#define NOTE_DS3 156
+#define NOTE_E3 165
+#define NOTE_F3 175
+#define NOTE_FS3 185
+#define NOTE_G3 196
+#define NOTE_GS3 208
+#define NOTE_A3 220
+#define NOTE_AS3 233
+#define NOTE_B3 247
+
+// Octave 4
 #define NOTE_C4 262
 #define NOTE_CS4 277
 #define NOTE_D4 294

@@ -1,7 +1,7 @@
 #pragma once
 #include "app_base.h"
 
-class AppPurger : public AppBase
+class AppProto : public AppBase
 {
 public:
         void setup(const AppContext &context) override;

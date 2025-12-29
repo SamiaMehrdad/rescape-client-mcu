@@ -90,6 +90,15 @@ const LedPattern Core::kLedPatterns[] = {
 // CONSTRUCTOR
 //============================================================================
 
+/************************* Core ***********************************
+ * Constructor for the Core system.
+ * @param pixels Pointer to PixelStrip driver.
+ * @param synth Pointer to Synth driver.
+ * @param animation Pointer to Animation driver.
+ * @param inputManager Pointer to InputManager driver.
+ * @param roomBus Pointer to RoomSerial driver.
+ * @param ioExpander Pointer to IOExpander driver.
+ ***************************************************************/
 Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
            InputManager *inputManager, RoomSerial *roomBus, IOExpander *ioExpander)
     : m_pixels(pixels),
@@ -127,7 +136,10 @@ Core::Core(PixelStrip *pixels, Synth *synth, Animation *animation,
 // PUBLIC METHODS
 //============================================================================
 
-// System-wide initialization - sets up all hardware and firmware modules
+/************************* begin ***********************************
+ * System-wide initialization - sets up all hardware and firmware modules.
+ * Initializes Serial, I2C, Pixels, Buttons, Timer, Watchdog, Synth, RoomBus.
+ ***************************************************************/
 void Core::begin()
 {
         delay(500);
@@ -186,6 +198,10 @@ void Core::begin()
         printBootReport();
 }
 
+/************************* init ***********************************
+ * Initializes core firmware logic and state.
+ * Sets initial mode, status LED, and loads configuration.
+ ***************************************************************/
 void Core::init()
 {
         m_mode = MODE_INTERACTIVE;
@@ -251,6 +267,10 @@ void Core::init()
         m_inputManager->setCallback(onInputEvent);
 }
 
+/************************* update ***********************************
+ * Main loop update function.
+ * Polls inputs, updates status LED, handles RoomBus commands, and updates the active App.
+ ***************************************************************/
 void Core::update()
 {
         // Poll inputs
@@ -279,6 +299,10 @@ void Core::update()
         }
 }
 
+/************************* refreshAnimations ***********************************
+ * Updates the animation system.
+ * @param flag Reference to the pixel update flag.
+ ***************************************************************/
 void Core::refreshAnimations(volatile bool &flag)
 {
         m_animation->refresh(flag);
@@ -288,6 +312,12 @@ void Core::refreshAnimations(volatile bool &flag)
 // CONFIGURATION
 //============================================================================
 
+/************************* readDeviceType ***********************************
+ * Reads the device type from the configuration potentiometer.
+ * Uses averaging and noise detection for reliability.
+ * @param verbose Whether to print debug info to Serial.
+ * @return Detected DeviceType or INVALID_TYPE.
+ ***************************************************************/
 u8 Core::readDeviceType(bool verbose)
 {
         using namespace ADCConfig;
@@ -387,6 +417,10 @@ u8 Core::readDeviceType(bool verbose)
         return deviceType;
 }
 
+/************************* printBootReport ***********************************
+ * Prints a detailed boot report to Serial.
+ * Includes device config, hardware status, and operating mode.
+ ***************************************************************/
 void Core::printBootReport()
 {
         Serial.println("\n╔════════════════════════════════════════════════════════════╗");
@@ -515,6 +549,10 @@ void Core::printBootReport()
         Serial.println();
 }
 
+/************************* saveAddress ***********************************
+ * Saves the device address to NVS.
+ * @param address The address to save.
+ ***************************************************************/
 void Core::saveAddress(u8 address)
 {
         using namespace TypeLimits;
@@ -550,6 +588,10 @@ void Core::saveAddress(u8 address)
         }
 }
 
+/************************* loadAddress ***********************************
+ * Loads the device address from NVS.
+ * @return The loaded address or INVALID_TYPE if not found.
+ ***************************************************************/
 u8 Core::loadAddress()
 {
         using namespace TypeLimits;
@@ -569,6 +611,10 @@ u8 Core::loadAddress()
         return address;
 }
 
+/************************* saveDeviceType ***********************************
+ * Saves the device type to NVS.
+ * @param type The device type to save.
+ ***************************************************************/
 void Core::saveDeviceType(u8 type)
 {
         using namespace TypeLimits;
@@ -586,6 +632,10 @@ void Core::saveDeviceType(u8 type)
         }
 }
 
+/************************* loadDeviceType ***********************************
+ * Loads the device type from NVS.
+ * @return The loaded device type or INVALID_TYPE if not found.
+ ***************************************************************/
 u8 Core::loadDeviceType()
 {
         using namespace TypeLimits;
@@ -595,10 +645,17 @@ u8 Core::loadDeviceType()
         return type;
 }
 
+/************************* clearStoredConfig ***********************************
+ * Clears all stored configuration from NVS (Factory Reset).
+ ***************************************************************/
 void Core::clearStoredConfig()
 {
         m_preferences.remove("address");
         m_preferences.remove("deviceType");
+        /************************* getDeviceTypeName ***********************************
+         * Gets the string name of the current device type.
+         * @return C-string name of the device type.
+         ***************************************************************/
         Serial.println("Stored config cleared (factory reset).");
 }
 
@@ -607,6 +664,11 @@ const char *Core::getDeviceTypeName() const
         return DeviceConfigurations::getName(m_type);
 }
 
+/************************* setMode ***********************************
+ * Sets the operating mode of the Core.
+ * Handles mode transitions and logging.
+ * @param mode The new CoreMode to set.
+ ***************************************************************/
 //============================================================================
 // EVENT HANDLING
 //============================================================================
@@ -655,7 +717,11 @@ void Core::setMode(CoreMode mode)
 // CALLBACK WRAPPER
 //============================================================================
 
-// Static callback wrapper
+/************************* onInputEvent ***********************************
+ * Static callback wrapper for input events.
+ * Forwards the event to the singleton instance.
+ * @param event The input event ID.
+ ***************************************************************/
 void Core::onInputEvent(InputEvent event)
 {
         if (s_instance)
@@ -668,6 +734,11 @@ void Core::onInputEvent(InputEvent event)
 // INPUT EVENT DISPATCHER
 //============================================================================
 
+/************************* handleInputEvent ***********************************
+ * Dispatches input events to the appropriate handler based on mode.
+ * Handles system overrides (long press), test modes, and app input.
+ * @param event The input event ID.
+ ***************************************************************/
 void Core::handleInputEvent(InputEvent event)
 {
         // System-wide overrides
@@ -690,8 +761,11 @@ void Core::handleInputEvent(InputEvent event)
         // Application handling (Normal Operation)
         if (m_app && m_mode == MODE_INTERACTIVE)
         {
-                m_app->handleInput(event);
-                return;
+                if (m_app->handleInput(event))
+                {
+                        return; // App consumed the event
+                }
+                // Fall through to legacy handling if app didn't consume it
         }
 
         // Legacy/Fallback handling (if no app or not interactive)
@@ -724,6 +798,10 @@ void Core::handleInputEvent(InputEvent event)
                 break;
         }
 }
+/************************* handleButton1Press ***********************************
+ * Handles short press of Button 1.
+ * Triggers pixel check on first press, then cycles colors/modes.
+ ***************************************************************/
 
 //============================================================================
 // BUTTON EVENT HANDLERS
@@ -766,6 +844,10 @@ void Core::handleButton1Press()
         m_synth->playNote(NOTE_GS4, 300, 250);
 }
 
+/************************* handleButtonLongPress ***********************************
+ * Handles long press of Button 1.
+ * Cycles through special modes: Normal -> Keypad Test -> Type Detection.
+ ***************************************************************/
 void Core::handleButtonLongPress()
 {
         // Cycle through special modes: Normal -> Keypad Test -> Type Detection -> Normal
@@ -787,10 +869,20 @@ void Core::handleButtonLongPress()
         }
 }
 
+/************************* handleKeypadPress ***********************************
+ * Handles keypad button press events.
+ * Plays a note corresponding to the key index.
+ * @param keyIndex The index of the pressed key (0-15).
+ ***************************************************************/
 void Core::handleKeypadPress(u8 keyIndex)
 {
         int note = kNoteMap[keyIndex];
 
+        /************************* handleRoomBusFrame ***********************************
+         * Handles incoming RoomBus frames.
+         * Filters by address and dispatches commands to Core or App.
+         * @param frame The received RoomFrame.
+         ***************************************************************/
         m_synth->setWaveform(WAVE_SINE);
         m_synth->setADSR(5, 50, 100, 100);
         m_synth->playNote(note, 150, 100);
@@ -860,6 +952,11 @@ void Core::handleRoomBusFrame(const RoomFrame &frame)
         }
 }
 
+/************************* sendHello ***********************************
+ * Sends a HELLO message to the server.
+ * Identifies the device by address and type.
+ * If unassigned, includes MAC address for identification.
+ ***************************************************************/
 void Core::sendHello()
 {
         if (m_roomBus)
@@ -917,6 +1014,10 @@ void Core::sendHello()
 // STATUS LED CONTROL
 //============================================================================
 
+/************************* setStatusLed ***********************************
+ * Sets the status LED blinking pattern.
+ * @param mode The StatusLedMode to set.
+ ***************************************************************/
 void Core::setStatusLed(StatusLedMode mode)
 {
         // Validate mode
@@ -934,6 +1035,10 @@ void Core::setStatusLed(StatusLedMode mode)
         digitalWrite(STATUS_LED_PIN, HIGH);
 }
 
+/************************* updateStatusLed ***********************************
+ * Updates the status LED state based on the current pattern.
+ * Called from the main loop.
+ ***************************************************************/
 void Core::updateStatusLed()
 {
         u32 now = millis();
@@ -990,6 +1095,10 @@ void Core::ledControl(u8 logicalIndex, u8 r, u8 g, u8 b)
         m_matrixPanel->ledControl(logicalIndex, r, g, b);
 }
 
+/************************* enterTypeDetectionMode ***********************************
+ * Enters the device type detection mode.
+ * Allows the user to select the device type using the potentiometer.
+ ***************************************************************/
 //============================================================================
 // TYPE DETECTION MODE
 //============================================================================
@@ -1034,6 +1143,11 @@ void Core::enterTypeDetectionMode()
         setStatusLed(STATUS_DEVICE_DETECTION);
 }
 
+/************************* exitTypeDetectionMode ***********************************
+ * Exits the device type detection mode.
+ * Saves the selected device type to NVS if valid.
+ * Restores the previous operating mode.
+ ***************************************************************/
 void Core::exitTypeDetectionMode()
 {
         using namespace TypeLimits;
@@ -1069,6 +1183,32 @@ void Core::exitTypeDetectionMode()
 
         Serial.println();
 
+        // Re-initialize the application with the new type
+        if (m_app)
+        {
+                delete m_app;
+                m_app = nullptr;
+        }
+
+        Serial.print("Initializing App for type: ");
+        Serial.println(getDeviceTypeName());
+
+        m_app = AppBase::create(m_type);
+        if (m_app)
+        {
+                AppContext context = {
+                    m_pixels,
+                    m_synth,
+                    m_animation,
+                    m_inputManager,
+                    m_roomBus,
+                    m_ioExpander,
+                    m_matrixPanel,
+                    &m_address,
+                    &m_type};
+                m_app->setup(context);
+        }
+
         // Restore previous mode
         m_mode = m_previousMode;
 
@@ -1081,6 +1221,10 @@ void Core::exitTypeDetectionMode()
         m_synth->playNote(NOTE_C5, 100, 150);
 }
 
+/************************* updateTypeDetectionMode ***********************************
+ * Updates the device type detection logic.
+ * Reads the potentiometer and updates the current device type.
+ ***************************************************************/
 void Core::updateTypeDetectionMode()
 {
         using namespace DetectionTiming;
@@ -1169,6 +1313,10 @@ void Core::updateTypeDetectionMode()
 // KEYPAD TEST MODE
 //============================================================================
 
+/************************* enterKeypadTestMode ***********************************
+ * Enters the keypad test mode.
+ * Allows testing of keypad buttons and LEDs.
+ ***************************************************************/
 void Core::enterKeypadTestMode()
 {
         Serial.println("\n╔════════════════════════════════════════════════════════════╗");
@@ -1193,6 +1341,10 @@ void Core::enterKeypadTestMode()
         }
 }
 
+/************************* exitKeypadTestMode ***********************************
+ * Exits the keypad test mode.
+ * Restores the previous operating mode.
+ ***************************************************************/
 void Core::exitKeypadTestMode()
 {
         Serial.println("\n╔════════════════════════════════════════════════════════════╗");
@@ -1203,6 +1355,11 @@ void Core::exitKeypadTestMode()
         m_pixels->clear();
         // m_pixels->show();
 
+        /************************* handleKeypadTestPress ***********************************
+         * Handles keypad presses in test mode.
+         * Toggles the LED corresponding to the pressed key.
+         * @param keyIndex The index of the pressed key (0-15).
+         ***************************************************************/
         // Restore previous mode
         m_mode = m_previousMode;
 }

@@ -68,9 +68,20 @@ The system uses a split configuration model to support multiple devices of the s
 -   **Animation System:** Buffer-based LED animations with configurable timing
 -   **Flexible Timers:** Easy-to-use hardware timer library (ESPTimer)
 -   **Audio Synthesis:** Multiple waveforms (sine, square, triangle, sawtooth) with ADSR
+    -   Polyphonic software synth (default 4 voices) using DDS per voice and per-voice ADSR envelopes
+    -   Default sample rate: 40 kHz; PWM carrier: 120 kHz (3x oversample) for improved noise shaping
+    -   Secondary PWM output available on GPIO8 (software-controlled): complements main output while playing, both driven LOW when silent
+    -   ISR-side smoothing applied to reduce stepping/quantization noise
 -   **Network Protocol:** Room Bus communication for multi-device systems
 -   **Modular Design:** Clean Core + App separation for easy expansion
 -   **Error Recovery:** Robust edge case handling and graceful degradation
+
+### Performance
+
+-   **Loop Cycle Time:** ~13ms (~75Hz) typical App level loop execution rate.
+    -   Includes Core overhead (Input polling, I2C communication, Status LED updates).
+    -   Application logic runs within this cycle.
+    -   **Note:** Blocking delays (`delay()`) in App code will increase this time and may trigger the Watchdog timer (1s timeout).
 
 ## Hardware Requirements
 

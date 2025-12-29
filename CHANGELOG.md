@@ -44,20 +44,9 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 ---
 
-## December 26, 2025 - Device Configuration Refactoring
-
-### 🛠️ Simplified Device Configuration System
-
-**Status:** ✅ Complete
-
 **Summary:** Refactored the device configuration system to replace the complex X-Macro pattern with a simpler, more explicit struct-based approach. This improves readability and maintainability.
 
-**Changes:**
-
-1.  **Removed X-Macros**: Replaced `DEVICE_TYPE_LIST` macro with a standard `DeviceType` enum and a `DeviceDefinition` struct.
-2.  **Unified Definitions**: All device properties (ID, Name, Hardware Config, Commands) are now defined in a single `ALL_DEVICES` array in `src/deviceconfig.cpp`.
-3.  **Explicit IDs**: Device IDs are now explicitly assigned in the configuration array, preventing accidental reordering.
-4.  **Updated API**: `DeviceConfigurations` class now uses the new `ALL_DEVICES` array for lookups.
+**Changes:** 2. **Unified Definitions**: All device properties (ID, Name, Hardware Config, Commands) are now defined in a single `ALL_DEVICES` array in `src/deviceconfig.cpp`. 4. **Updated API**: `DeviceConfigurations` class now uses the new `ALL_DEVICES` array for lookups.
 
 ---
 
@@ -73,7 +62,6 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 1.  **MatrixPanel Class:**
 
-    -   Extracted `MatrixPanel` class to handle all Keypad+LED matrix logic.
     -   Separated low-level hardware mapping from Core logic.
     -   Added high-level methods (`clear`, `fill`, `setCell`).
 
@@ -107,7 +95,6 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 1.  **Protocol Synchronization**
 
-    -   Updated `roomBus.ts` to match `roombus.h` definitions (24-byte frame, command IDs).
     -   Aligned command ranges: Server (0x40-0x7F), Event (0x80-0xFF).
     -   Documented the "Address + Command" dispatch model in `roombus.h`.
 
@@ -133,8 +120,6 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 -   Added instruction comment near `TypeLimits` in `src/core.cpp` covering `DEVICE_TYPE_LIST`, `kConfigs`, and `MAX_CURRENT_TYPE` updates when exposing IDs above 31.
 
----
-
 ## December 9, 2025 - Device Configuration System (X-Macro Pattern)
 
 ### 🎯 Centralized Hardware Configuration with Single Source of Truth
@@ -145,9 +130,6 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 **Changes:**
 
-1. **X-Macro Pattern for Device Types**
-
-    - Single `DEVICE_TYPE_LIST` macro defines all device types once
     - Automatically generates both `DeviceType` enum and `DEVICE_TYPE_NAMES` array
     - Eliminates duplication between enum values and display names
     - Easy maintenance: add new device by editing one line

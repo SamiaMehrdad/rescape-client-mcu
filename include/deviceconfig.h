@@ -38,14 +38,15 @@ enum DeviceType : u8
         GLOW_DOTS = 4,
         QB = 5,
         RGB_MIXER = 6,
-        PURGER = 7,
+        PROTO = 7,
         FINAL_ORDER = 8,
         BALL_GATE = 9,
         ACTUATOR = 10,
         THE_WALL = 11,
         SCORES = 12,
         BALL_BASE = 13,
-        // ... types 14-63 are generic/reserved
+        PURGER = 14,
+        // ... types 15-63 are generic/reserved
 };
 
 // --- Data Structures ---

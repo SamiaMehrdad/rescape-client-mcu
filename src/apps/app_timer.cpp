@@ -1,8 +1,19 @@
+/************************* app_timer.cpp **********************
+ * Timer Application Implementation
+ * Logic for the Timer device type
+ * Created by MSK, November 2025
+ ***************************************************************/
+
 #include "app_timer.h"
 #include <Arduino.h>
 #include "pixel.h"
 #include "roombus.h"
 
+/************************* setup ***********************************
+ * Initializes the Timer application.
+ * Sets initial LED state.
+ * @param context The application context.
+ ***************************************************************/
 void AppTimer::setup(const AppContext &context)
 {
         AppBase::setup(context);
@@ -16,12 +27,19 @@ void AppTimer::setup(const AppContext &context)
         }
 }
 
+/************************* loop ***********************************
+ * Main loop for the Timer application.
+ ***************************************************************/
 void AppTimer::loop()
 {
         // Timer logic would go here
 }
 
-void AppTimer::handleInput(InputEvent event)
+/************************* handleInput ***********************************
+ * Handles input events for the Timer application.
+ * @param event The input event ID.
+ ***************************************************************/
+bool AppTimer::handleInput(InputEvent event)
 {
         Serial.print("Timer Input: ");
         Serial.println(event);
@@ -31,8 +49,14 @@ void AppTimer::handleInput(InputEvent event)
         {
                 sendEvent(EV_TMR_DONE);
                 Serial.println("Sent EV_TMR_DONE");
+                return true; // Consume event
         }
+        return false; // Let Core handle other inputs
 }
+/************************* handleCommand ***********************************
+ * Handles RoomBus commands for the Timer application.
+ * @param frame The received command frame.
+ ***************************************************************/
 
 // Handle RoomBus commands specific to Timer
 // Commands are defined in roombus.h
