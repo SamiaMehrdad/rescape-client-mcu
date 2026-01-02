@@ -8,6 +8,19 @@
 #include <Arduino.h>
 #include "pixel.h"
 #include "synth.h" // Include synth.h to access Synth class and note definitions
+#include "music.h"
+#include "songs.h"
+
+AppProto::~AppProto()
+{
+        if (m_player)
+        {
+                if (m_context.synth)
+                        m_context.synth->setMusicPlayer(nullptr);
+                delete m_player;
+                m_player = nullptr;
+        }
+}
 
 /************************* setup ***********************************
  * Initializes the Proto application.
@@ -24,6 +37,17 @@ void AppProto::setup(const AppContext &context)
         {
                 m_context.pixels->setAll(0xFF0000); // Red
                 m_context.pixels->show();
+        }
+
+        // Enable Echo Effect
+        if (m_context.synth)
+        {
+                // Enable Echo: 300ms delay, ~40% feedback (100/255), ~50% mix (128/255)
+                m_context.synth->setEcho(true, 300, 100, 128);
+
+                // Initialize Music Player
+                m_player = new MusicPlayer(m_context.synth);
+                m_context.synth->setMusicPlayer(m_player);
         }
 }
 
@@ -75,15 +99,31 @@ bool AppProto::handleInput(InputEvent event)
                         return true;
                 }
 
-                // Percussion on keys 12-15
-                if (keyIndex >= 12 && keyIndex <= 15 && m_context.synth)
+                // Songs on keys 12-14
+                if (keyIndex >= 12 && keyIndex <= 14 && m_player)
                 {
-                        Serial.printf("Percussion key %d\n", keyIndex);
-                        m_context.synth->setSoundPreset(SOUND_PERCUSSION);
-                        // Map last 4 keys to different short noises
-                        const u16 percFreqs[4] = {100, 200, 300, 400};
-                        u16 f = percFreqs[keyIndex - 12];
-                        m_context.synth->playNote(f, 120, 255);
+                        Serial.printf("Playing Song for key %d\n", keyIndex);
+                        switch (keyIndex)
+                        {
+                        case 12:
+                                m_player->playSong(SONG_INTRO);
+                                break;
+                        case 13:
+                                m_player->playSong(SONG_SUCCESS);
+                                break;
+                        case 14:
+                                m_player->playSong(SONG_ERROR);
+                                break;
+                        }
+                        return true;
+                }
+
+                // Music on key 15
+                if (keyIndex == 15 && m_player)
+                {
+                        Serial.println("Playing Complex Tune!");
+                        // Preset is now handled per-note in the sequence
+                        m_player->playSong(SONG_COMPLEX);
                         return true;
                 }
         }

@@ -6,6 +6,7 @@
  ***************************************************************/
 
 #include "synth.h"
+#include "music.h" // Include for MusicPlayer definition
 #include <math.h>
 #include <algorithm>
 
@@ -50,7 +51,9 @@ void IRAM_ATTR sampleTimerISR()
  * Construct Synth with output pin and PWM channel.
  ***************************************************************/
 Synth::Synth(u8 outputPin, u8 pwmChannel)
-    : pin(outputPin), channel(pwmChannel), sampleRate(8000), waveform(WAVE_SINE)
+    : pin(outputPin), channel(pwmChannel), sampleRate(8000), waveform(WAVE_SINE),
+      presetEchoEnabled(false), delayBuffer(nullptr), delayBufferLen(0), delayWriteIndex(0),
+      musicPlayer(nullptr)
 {
         // Default ADSR envelope
         envelope.attackMs = 10;
@@ -58,20 +61,41 @@ Synth::Synth(u8 outputPin, u8 pwmChannel)
         envelope.sustainLevel = 200;
         envelope.releaseMs = 100;
 
+        // Default Echo
+        echo.globalEnabled = false;
+        echo.delayMs = 300;
+        echo.feedback = 100;
+        echo.mix = 100;
+
         // Initialize voices
         for (int i = 0; i < NUM_CHANNELS; i++)
         {
                 voices[i].active = false;
+                voices[i].enableEcho = false;
                 voices[i].envState = Voice::IDLE;
         }
 
         synthInstance = this;
 }
 
+Synth::~Synth()
+{
+        if (delayBuffer)
+        {
+                delete[] delayBuffer;
+                delayBuffer = nullptr;
+        }
+}
+
 void Synth::setSecondaryOutput(u8 p, u8 ch)
 {
         pin2 = p;
         channel2 = ch;
+}
+
+void Synth::setMusicPlayer(MusicPlayer *player)
+{
+        musicPlayer = player;
 }
 
 //============================================================================
@@ -95,6 +119,21 @@ void Synth::setSoundPreset(SoundPreset preset)
         const u16 *params = SOUND_PRESETS[preset];
         setWaveform(static_cast<Waveform>(params[0]));
         setADSR(params[1], params[2], params[3], params[4]);
+
+        // Configure Echo Property for this sound
+        switch (preset)
+        {
+        case SOUND_PLUCK:
+        case SOUND_FLUTE:
+        case SOUND_SYNTH_LEAD:
+                presetEchoEnabled = true;
+                break;
+        case SOUND_PERCUSSION:
+        case SOUND_BEEP:
+        default:
+                presetEchoEnabled = false;
+                break;
+        }
 }
 
 /************************* begin *******************************************
@@ -103,6 +142,15 @@ void Synth::setSoundPreset(SoundPreset preset)
 void Synth::begin(u16 sampleRateHz)
 {
         sampleRate = sampleRateHz;
+
+        // Allocate delay buffer
+        if (delayBuffer != nullptr)
+                delete[] delayBuffer;
+        // Calculate buffer size needed for max delay (e.g. 600ms) or fixed size
+        delayBufferLen = MAX_DELAY_BUFFER_SIZE;
+        delayBuffer = new u8[delayBufferLen];
+        memset(delayBuffer, 128, delayBufferLen); // Fill with silence (128 for 8-bit audio)
+        delayWriteIndex = 0;
 
         // Setup PWM for audio output (main)
         ledcSetup(channel, sampleRate * 3, 8); // 8-bit resolution
@@ -136,6 +184,17 @@ void Synth::setADSR(u16 attack, u16 decay, u8 sustain, u16 release)
         envelope.decayMs = decay;
         envelope.sustainLevel = std::min<u8>(255, sustain);
         envelope.releaseMs = release;
+}
+
+/************************* setEcho ***************************************
+ * Configure Echo Effect parameters.
+ ***************************************************************/
+void Synth::setEcho(bool enabled, u16 delayMs, u8 feedback, u8 mix)
+{
+        echo.globalEnabled = enabled;
+        echo.delayMs = delayMs;
+        echo.feedback = feedback;
+        echo.mix = mix;
 }
 
 //============================================================================
@@ -245,6 +304,7 @@ void Synth::playNote(u16 freq, u16 durationMs, u8 volume)
 
         Voice &v = voices[voiceIndex];
         v.active = true;
+        v.enableEcho = presetEchoEnabled;
         v.frequency = freq;
         v.baseVolume = volume;
         v.waveform = waveform; // Use current global waveform setting
@@ -322,7 +382,14 @@ bool Synth::isPlaying()
  ***************************************************************/
 void IRAM_ATTR Synth::updateSample()
 {
+        // --- 0. Update Music Player ---
+        if (musicPlayer)
+        {
+                musicPlayer->update();
+        }
+
         int32_t mixedSample = 0;
+        int32_t echoSendSample = 0;
         int activeVoices = 0;
 
         for (int i = 0; i < NUM_CHANNELS; i++)
@@ -412,11 +479,57 @@ void IRAM_ATTR Synth::updateSample()
 
                 // Accumulate
                 mixedSample += processedSample;
+
+                // Layer 1: Echo Send
+                if (v.enableEcho)
+                {
+                        echoSendSample += processedSample;
+                }
+        }
+
+        // --- Layer 2: Echo Processing ---
+        if (echo.globalEnabled && delayBuffer != nullptr)
+        {
+                // Calculate read position based on delayMs
+                // delayMs * sampleRate / 1000
+                u32 delaySamples = ((u32)echo.delayMs * sampleRate) / 1000;
+                if (delaySamples > delayBufferLen)
+                        delaySamples = delayBufferLen;
+                if (delaySamples == 0)
+                        delaySamples = 1; // Avoid reading same sample
+
+                int32_t readIndex = (int32_t)delayWriteIndex - (int32_t)delaySamples;
+                if (readIndex < 0)
+                        readIndex += delayBufferLen;
+
+                // Read from delay line (convert 0..255 to -128..127)
+                int32_t delayedSignal = (int32_t)delayBuffer[readIndex] - 128;
+
+                // Calculate Feedback: Input + (Delayed * Feedback)
+                // Feedback is 0..255 (representing 0.0 to ~1.0)
+                int32_t feedbackSignal = echoSendSample + ((delayedSignal * echo.feedback) >> 8);
+
+                // Clip and write back to buffer (convert back to 0..255)
+                if (feedbackSignal > 127)
+                        feedbackSignal = 127;
+                if (feedbackSignal < -128)
+                        feedbackSignal = -128;
+                delayBuffer[delayWriteIndex] = (u8)(feedbackSignal + 128);
+
+                // Advance buffer
+                delayWriteIndex++;
+                if (delayWriteIndex >= delayBufferLen)
+                        delayWriteIndex = 0;
+
+                // Mix Echo into Total: Dry + (Delayed * Mix)
+                // Mix is 0..255
+                mixedSample += (delayedSignal * echo.mix) >> 8;
         }
 
         // --- 5. Final Mix & Output ---
         static bool pwmActive = false;
-        if (activeVoices > 0)
+        // Keep active if voices are playing OR echo is enabled (to hear tails)
+        if (activeVoices > 0 || (echo.globalEnabled && delayBuffer != nullptr))
         {
                 // If PWM was stopped, reattach
                 bool justAttached = false;
@@ -428,6 +541,8 @@ void IRAM_ATTR Synth::updateSample()
                         justAttached = true;
                 }
                 // Simple limiter/clipper
+                // Divide by 2 to prevent clipping when multiple voices sum up
+                // With echo, we might need more headroom, but let's stick to /2 for now
                 mixedSample = mixedSample / 2;
                 if (mixedSample > 127)
                         mixedSample = 127;

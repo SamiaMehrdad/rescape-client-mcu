@@ -44,6 +44,37 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 
 ---
 
+## January 2, 2026 - Audio Engine Upgrade
+
+### 🎵 Advanced Audio Features
+
+**Status:** ✅ Complete
+
+**Summary:** Major upgrade to the synthesizer engine to support echo effects and complex polyphonic music sequencing.
+
+**Changes:**
+
+1.  **Echo Effect (Delay Line):**
+    -   Implemented a circular buffer delay line (~6000 bytes).
+    -   **Per-Voice Send:** Individual voices can be routed to the echo effect (e.g., Flute/Lead have echo, Percussion is dry).
+    -   **Global Controls:** Configurable Delay Time, Feedback, and Mix.
+
+2.  **Polyphonic Music Player:**
+    -   **Sequencer:** New `MusicPlayer` class integrated into the Synth ISR.
+    -   **Polyphony:** Supports chords and simultaneous notes via `advance` parameter.
+    -   **Multi-Timbral:** Each note in a sequence can use a different instrument preset.
+
+3.  **Song Library:**
+    -   Created `songs.h` / `songs.cpp` as a centralized repository for system sounds.
+    -   Added standard sounds: `SONG_INTRO`, `SONG_SUCCESS`, `SONG_ERROR`.
+    -   Added `SONG_COMPLEX` demo tune.
+
+4.  **Proto App Update:**
+    -   Keys 12-14 trigger Intro, Success, and Error sounds.
+    -   Key 15 triggers the complex polyphonic demo.
+
+---
+
 **Summary:** Refactored the device configuration system to replace the complex X-Macro pattern with a simpler, more explicit struct-based approach. This improves readability and maintainability.
 
 **Changes:** 2. **Unified Definitions**: All device properties (ID, Name, Hardware Config, Commands) are now defined in a single `ALL_DEVICES` array in `src/deviceconfig.cpp`. 4. **Updated API**: `DeviceConfigurations` class now uses the new `ALL_DEVICES` array for lookups.

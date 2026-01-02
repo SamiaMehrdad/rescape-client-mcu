@@ -44,6 +44,10 @@ The system uses a split configuration model to support multiple devices of the s
 -   **Device Type Configuration**: 32 device types (0-31) selectable via 20kΩ trimmer pot
 -   **Calibration Mode**: Long-press boot button to enter type detection mode
 -   **Persistent Storage**: Device type saved to NVS, survives reboots
+-   **Audio Engine**:
+    -   4-Voice Polyphonic Synthesizer.
+    -   Integrated Echo/Delay effect.
+    -   Polyphonic Music Sequencer with multi-instrument support.
 -   **Status Monitoring**: LED indicator for system health
     -   Solid ON = All systems OK
     -   Fast blink (5 Hz) = I2C communication error

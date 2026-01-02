@@ -54,9 +54,9 @@ static const DeviceDefinition DEVICE_CATALOG[] = {
     {
         RGB_MIXER, "RGBMixer", {.cellCount = 8, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}},
 
-    // ID 7: Purger
+    // ID 7: Prototype
     {
-        PURGER, "Purger", {.cellCount = 16, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({PURGER_SET_STATE})}},
+        PROTO, "Prototype", {.cellCount = 16, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}},
 
     // ID 8: Final Order
     {
@@ -80,7 +80,11 @@ static const DeviceDefinition DEVICE_CATALOG[] = {
 
     // ID 13: Ball Base
     {
-        BALL_BASE, "BallBase", {.cellCount = 0, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}}};
+        BALL_BASE, "BallBase", {.cellCount = 0, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({})}},
+    // ID 14: Purger
+    {
+        PURGER, "Purger", {.cellCount = 16, .keyNames = {}, .motorNames = {}, .commands = makeCommandSet({PURGER_SET_STATE})}},
+};
 
 static const size_t DEVICE_COUNT = sizeof(DEVICE_CATALOG) / sizeof(DEVICE_CATALOG[0]);
 
