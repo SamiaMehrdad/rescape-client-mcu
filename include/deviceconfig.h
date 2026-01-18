@@ -74,7 +74,7 @@ inline CommandSet makeCommandSet(std::initializer_list<RoomServerCommand> list)
 // 2. Hardware Configuration
 struct DeviceConfig
 {
-        u8 cellCount;                       // Number of LEDs/Keys
+        u16 cellCount;                      // Number of LEDs/Keys
         const char *keyNames[MAX_KEYS];     // Optional key names (nullptr = default)
         const char *motorNames[MAX_MOTORS]; // Optional motor names (nullptr = unused)
         CommandSet commands;                // Supported commands

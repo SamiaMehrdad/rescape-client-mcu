@@ -33,7 +33,7 @@ static const DeviceDefinition DEVICE_CATALOG[] = {
     // ID 2: Num Box
     {
         NUM_BOX, "NumBox",
-        {.cellCount = 28, // 4*6 7segments
+        {.cellCount = 264, // 4*6 of my 11segments
          .keyNames = {},
          .motorNames = {},
          .commands = makeCommandSet({NUM_SET_DIGIT_COLOR, NUM_SET_DIGIT_VAL, NUM_SET_ROW_NUM})}},

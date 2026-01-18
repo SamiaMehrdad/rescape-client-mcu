@@ -7,6 +7,7 @@ MusicPlayer::MusicPlayer(Synth *s) : synth(s), playing(false), bpm(120)
         melodyLength = 0;
         currentNoteIndex = 0;
         samplesPerTick = 0;
+        msPerTick = 0;
         tickCounter = 0;
         ticksUntilNextStep = 0;
 }
@@ -57,11 +58,12 @@ void MusicPlayer::setBPM(u8 newBpm)
         // 16th notes per minute = BPM * 4
         // Samples per 16th note = (sampleRate * 60) / (BPM * 4) = (sampleRate * 15) / BPM
 
-        // We need sampleRate. Synth has it, but it's private.
-        // Assuming 40000Hz as per Synth::init()
-        // TODO: Get actual sample rate from Synth if possible, or assume 40000
-        u32 sampleRate = 40000;
+        // Get actual sample rate from Synth
+        u32 sampleRate = synth ? synth->getSampleRate() : 40000;
         samplesPerTick = (sampleRate * 15) / bpm;
+
+        // Pre-calculate ms per tick to avoid division in ISR
+        msPerTick = (15000 + (bpm >> 1)) / bpm; // +rounding
 }
 
 // This runs in ISR context!
@@ -98,8 +100,8 @@ void IRAM_ATTR MusicPlayer::update()
                         if (note.note > 0)
                         {
                                 synth->setSoundPreset(note.preset);
-                                u32 msPerTick = 15000 / bpm;
-                                u32 durationMs = note.duration * msPerTick;
+                                // Use pre-calculated msPerTick instead of dividing in ISR
+                                u32 durationMs = (u32)note.duration * msPerTick;
                                 synth->playNote(note.note, durationMs);
                         }
 

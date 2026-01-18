@@ -26,47 +26,48 @@ static const MusicNote NOTES_ERROR[] = {
     {NOTE_CS3, DUR_2, DUR_2, SOUND_ORGAN}};
 const Song SONG_ERROR = {NOTES_ERROR, sizeof(NOTES_ERROR) / sizeof(MusicNote), 100};
 
-// --- 4. Complex Demo Tune ---
+// --- 4. Drum & Guitar Demo Tune ---
 static const MusicNote NOTES_COMPLEX[] = {
-    // Bar 1: C Major Chord (C3, E3, G3) + Melody C5 ascending
-    {NOTE_C3, DUR_1, 0, SOUND_PIANO},     // Bass C3 (Whole note), simultaneous
-    {NOTE_E3, DUR_1, 0, SOUND_PIANO},     // Chord E3 (Whole note), simultaneous
-    {NOTE_G3, DUR_1, 0, SOUND_PIANO},     // Chord G3 (Whole note), simultaneous
-    {NOTE_C5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody C5 (Quarter), advance 4
+    // Bar 1: Drum kick pattern + Guitar riff (C)
+    {NOTE_C2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum C2
+    {NOTE_C4, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar C4
+    {NOTE_C2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_E4, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar E4
+    {NOTE_C2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_G4, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar G4
+    {NOTE_C2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_C5, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar C5
 
-    {NOTE_D5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody D5
-    {NOTE_E5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody E5
-    {NOTE_F5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody F5
+    // Bar 2: Drum kick pattern + Guitar riff (F)
+    {NOTE_F2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum F2
+    {NOTE_F4, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar F4
+    {NOTE_F2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_A4, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar A4
+    {NOTE_F2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_C5, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar C5
+    {NOTE_F2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_F5, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar F5
 
-    // Bar 2: G Major Chord (G2, B2, D3) + Melody G5 descending
-    {NOTE_G2, DUR_1, 0, SOUND_PIANO},     // Bass G2
-    {NOTE_B2, DUR_1, 0, SOUND_PIANO},     // Chord B2
-    {NOTE_D3, DUR_1, 0, SOUND_PIANO},     // Chord D3
-    {NOTE_G5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody G5
+    // Bar 3: Drum kick pattern + Guitar riff (G)
+    {NOTE_G2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum G2
+    {NOTE_G4, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar G4
+    {NOTE_G2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_B4, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar B4
+    {NOTE_G2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_D5, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar D5
+    {NOTE_G2, DUR_8, DUR_8, SOUND_DRUM},  // Kick drum
+    {NOTE_G5, DUR_8, DUR_8, SOUND_PLUCK}, // Guitar G5
 
-    {NOTE_F5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody F5
-    {NOTE_E5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody E5
-    {NOTE_D5, DUR_4, DUR_4, SOUND_FLUTE}, // Melody D5
-
-    // Bar 3: A Minor Chord (A2, C3, E3) + Arpeggio
-    {NOTE_A2, DUR_1, 0, SOUND_PIANO},     // Bass A2
-    {NOTE_C3, DUR_1, 0, SOUND_PIANO},     // Chord C3
-    {NOTE_E3, DUR_1, 0, SOUND_PIANO},     // Chord E3
-    {NOTE_C6, DUR_8, DUR_8, SOUND_FLUTE}, // Melody C6 (Eighth)
-    {NOTE_B5, DUR_8, DUR_8, SOUND_FLUTE},
-    {NOTE_A5, DUR_8, DUR_8, SOUND_FLUTE},
-    {NOTE_G5, DUR_8, DUR_8, SOUND_FLUTE},
-    {NOTE_F5, DUR_8, DUR_8, SOUND_FLUTE},
-    {NOTE_E5, DUR_8, DUR_8, SOUND_FLUTE},
-    {NOTE_D5, DUR_8, DUR_8, SOUND_FLUTE},
-    {NOTE_C5, DUR_8, DUR_8, SOUND_FLUTE},
-
-    // Final Chord: C Major
-    {NOTE_C3, DUR_2, 0, SOUND_PIANO},
-    {NOTE_E3, DUR_2, 0, SOUND_PIANO},
-    {NOTE_G3, DUR_2, 0, SOUND_PIANO},
-    {NOTE_C4, DUR_2, DUR_2, SOUND_PIANO},
+    // Bar 4: Finale - All together (C Major)
+    {NOTE_C2, DUR_4, 0, SOUND_DRUM},  // Kick drum
+    {NOTE_C4, DUR_4, 0, SOUND_PLUCK}, // Guitar chord (simultaneous)
+    {NOTE_E4, DUR_4, 0, SOUND_PLUCK},
+    {NOTE_G4, DUR_4, 0, SOUND_PLUCK},
+    {NOTE_C2, DUR_4, 0, SOUND_DRUM},  // Kick drum
+    {NOTE_C4, DUR_4, 0, SOUND_PLUCK}, // Guitar chord
+    {NOTE_E4, DUR_4, 0, SOUND_PLUCK},
+    {NOTE_G4, DUR_4, DUR_4, SOUND_PLUCK},
 
     {0, DUR_4, DUR_4, SOUND_DEFAULT} // Rest
 };
-const Song SONG_COMPLEX = {NOTES_COMPLEX, sizeof(NOTES_COMPLEX) / sizeof(MusicNote), 100};
+const Song SONG_COMPLEX = {NOTES_COMPLEX, sizeof(NOTES_COMPLEX) / sizeof(MusicNote), 120};

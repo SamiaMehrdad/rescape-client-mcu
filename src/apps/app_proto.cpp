@@ -88,34 +88,42 @@ bool AppProto::handleInput(InputEvent event)
                 if (keyIndex >= 0 && keyIndex <= 11 && m_context.synth)
                 {
                         static const u16 pianoNotes[12] = {
-                            NOTE_C4, NOTE_CS4, NOTE_D4, NOTE_DS4,
+                            NOTE_C4, NOTE_C5, NOTE_C6, NOTE_DS4,
                             NOTE_E4, NOTE_F4, NOTE_FS4, NOTE_G4,
                             NOTE_GS4, NOTE_A4, NOTE_AS4, NOTE_B4};
 
                         u16 note = pianoNotes[keyIndex];
                         Serial.printf("Piano key %d -> note %u\n", keyIndex, note);
-                        m_context.synth->setSoundPreset(SOUND_FLUTE);
-                        m_context.synth->playNote(note, 500, 200);
+
+                        // Configure specific parameters for the user request
+                        // Use the new BELL preset
+                        m_context.synth->setSoundPreset(SOUND_BELL);
+
+                        // Set a longer echo for this "instrument sound with long echo"
+                        // Delay 400ms, Feedback 180 (high feedback for long tail)
+                        m_context.synth->setEcho(true, 600, 10, 250);
+
+                        m_context.synth->playNote(note, 100, 250);
                         return true;
                 }
 
-                // Songs on keys 12-14
-                if (keyIndex >= 12 && keyIndex <= 14 && m_player)
+                if (m_player)
                 {
-                        Serial.printf("Playing Song for key %d\n", keyIndex);
-                        switch (keyIndex)
+                        if (keyIndex == 12)
                         {
-                        case 12:
                                 m_player->playSong(SONG_INTRO);
-                                break;
-                        case 13:
-                                m_player->playSong(SONG_SUCCESS);
-                                break;
-                        case 14:
-                                m_player->playSong(SONG_ERROR);
-                                break;
+                                return true;
                         }
-                        return true;
+                        if (keyIndex == 13)
+                        {
+                                m_player->playSong(SONG_SUCCESS);
+                                return true;
+                        }
+                        if (keyIndex == 14)
+                        {
+                                m_player->playSong(SONG_ERROR);
+                                return true;
+                        }
                 }
 
                 // Music on key 15

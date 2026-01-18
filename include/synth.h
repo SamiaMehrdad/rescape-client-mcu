@@ -31,24 +31,54 @@ enum SoundPreset
         SOUND_PERCUSSION, // Noise, very short, sharp (drum, click)
         SOUND_BEEP,       // Square wave, instant on/off (beep, alert)
         SOUND_SYNTH_LEAD, // Sawtooth, balanced envelope (lead synth)
+        SOUND_BELL,       // Sine wave, fast attack, long decay (music box, glockenspiel)
+        SOUND_DRUM,       // Drum waveform, tight percussive (kick, bass drum)
         SOUND_DEFAULT     // Triangle wave, balanced general purpose
 };
 
+// Sound preset lookup table [preset][waveform, attack, decay, sustain, release, echoEnabled, echoSendLevel]
+// CRITICAL TUNING RULES:
+// 1. playNote() duration must be > attackMs or sound will cut off before peak.
+// 2. SustainLevel is VOLUME (0-255), not time. Set to 0 for percussive sounds (drums, bells).
+// 3. For plucked sounds (Guitar), set Sustain < 255 so Decay has room to fall.
+// 4. echoEnabled: 1 = send to global echo, 0 = no echo for this preset
+// 5. echoSendLevel: 0-255 = how much signal to send to echo (0 = none, 255 = full)
+static const u16 SOUND_PRESETS[][7] = {
+    {WAVE_TRIANGLE, 5, 80, 50, 120, 0, 0},     // SOUND_PLUCK: No echo (dry guitar)
+    {WAVE_SINE, 150, 200, 180, 300, 1, 100},   // SOUND_FLUTE: Subtle echo (ambient)
+    {WAVE_SQUARE, 0, 0, 255, 50, 0, 0},        // SOUND_ORGAN: No echo (direct sound)
+    {WAVE_TRIANGLE, 10, 150, 120, 200, 0, 0},  // SOUND_PIANO: No echo (room handled by decay)
+    {WAVE_NOISE, 1, 30, 0, 50, 0, 0},          // SOUND_PERCUSSION: Dry (sharp attack)
+    {WAVE_SQUARE, 0, 5, 200, 10, 0, 0},        // SOUND_BEEP: No echo (alert tone)
+    {WAVE_SAWTOOTH, 20, 100, 150, 150, 1, 80}, // SOUND_SYNTH_LEAD: Moderate echo
+    {WAVE_SINE, 0, 1500, 0, 1500, 1, 200},     // SOUND_BELL: Full echo (natural resonance)
+    {WAVE_SINE, 1, 40, 0, 60, 0, 0},           // SOUND_DRUM: Sine with tight envelope (kick drum)
+    {WAVE_TRIANGLE, 5, 120, 100, 180, 0, 0}    // SOUND_DEFAULT: No echo
+};
+
 // ADSR envelope structure
+// CRITICAL TUNING RULES:
+// 1. playNote() duration must be > attackMs or sound will cut off before peak.
+// 2. SustainLevel is VOLUME (0-255), not time. Set to 0 for percussive sounds (drums, bells).
+// 3. For plucked sounds (Guitar), set Sustain < 255 so Decay has room to fall.
 struct ADSR
 {
-        u16 attackMs;    // Attack time in milliseconds
-        u16 decayMs;     // Decay time in milliseconds
-        u8 sustainLevel; // Sustain level (0-255)
-        u16 releaseMs;   // Release time in milliseconds
+        u16 attackMs;    // Attack time in milliseconds (0=Instant, 500=Slow Fade In)
+        u16 decayMs;     // Decay time in milliseconds (Time from Peak to Sustain Level)
+        u8 sustainLevel; // Sustain level (0-255) - Volume held while key is pressed
+        u16 releaseMs;   // Release time in milliseconds (Fade out time after key release)
 };
 
 // Echo Effect Parameters
+// CRITICAL TUNING RULES:
+// 1. delayMs Limit: MAX_DELAY_BUFFER_SIZE (6000 bytes) / SampleRate (8000Hz) = ~750ms MAX.
+// 2. Feedback Limit: Never use 255 (Infinite loop/Screech). Keep 100-200.
+// 3. Polyphony: Long echoes + Long Release times consume voices quickly.
 struct EchoParams
 {
         bool globalEnabled; // Master switch for the effect
-        u16 delayMs;        // Delay time in milliseconds
-        u8 feedback;        // 0-255: Amount of signal fed back (Repeats)
+        u16 delayMs;        // Delay time in milliseconds (Max ~750ms)
+        u8 feedback;        // 0-255: Amount of signal fed back (Repeats). DANGER: 255 = Infinite Scream.
         u8 mix;             // 0-255: Wet/Dry mix (0 = Dry, 255 = Full Echo)
 };
 
@@ -111,6 +141,7 @@ private:
 
         // Current preset settings for new notes
         bool presetEchoEnabled;
+        u8 presetEchoSendLevel; // Per-instrument echo send level (0-255)
 
         // Echo Effect State
         EchoParams echo;
@@ -126,8 +157,17 @@ private:
         // Music Player Hook
         MusicPlayer *musicPlayer;
 
+        // LFSR state for noise generation (fast, low-cost alternative to random())
+        uint32_t lfsrState;
+
+        // Low-pass filter state for output smoothing
+        int lpfState;
+
         // Generate waveform sample at given phase (0-255)
         u8 generateSample(u8 phase, Waveform wave);
+
+        // Fast LFSR-based noise generator
+        u8 generateLFSRNoise();
 
 public:
         Synth(u8 outputPin, u8 pwmChannel);
@@ -135,6 +175,9 @@ public:
 
         // Initialize synthesizer with a complete sound preset
         void init(SoundPreset preset = SOUND_DEFAULT);
+
+        // Get the current sample rate
+        u16 getSampleRate() const { return sampleRate; }
 
         // Attach Music Player
         void setMusicPlayer(MusicPlayer *player);

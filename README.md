@@ -48,6 +48,36 @@ The system uses a split configuration model to support multiple devices of the s
     -   4-Voice Polyphonic Synthesizer.
     -   Integrated Echo/Delay effect.
     -   Polyphonic Music Sequencer with multi-instrument support.
+
+### Synthesizer Tuning Guide
+
+The audio engine uses ADSR (Attack, Decay, Sustain, Release) envelopes and a delay line Echo effect. Proper configuration is required to avoid clicks, silence, or instability.
+
+#### 1. Time Parameter Relationships
+
+A note's lifecycle is: `Attack -> Decay -> Sustain (Hold) -> Release`.
+
+-   **Gate Time (playNote Duration)**: How long the virtual key is pressed.
+-   **Warning**: If `Duration` < `AttackMs`, the sound will cut off before reaching full volume (quiet "blip").
+-   **Rule**: `Duration` should generally be > `AttackMs + DecayMs` for sustained instruments.
+
+#### 2. ADSR Configuration
+
+-   **Attack (`attackMs`)**: 0ms = Click/Drum; 500ms = Violin fade-in.
+-   **Decay (`decayMs`)**: Time to drop from Max Volume to Sustain Level.
+-   **Sustain (`sustainLevel`)**: **VOLUME level (0-255), not time.**
+    -   Set to **0** for percussion (Drums, Bells) so sound fades even if key is held.
+    -   Set to **<255** for plucked strings so there is a drop-off after the attack.
+-   **Release (`releaseMs`)**: Fade out time _after_ the note duration ends.
+
+#### 3. Echo/Delay Constraints
+
+-   **Memory Limit**: Max delay is **~750ms** (6000 byte buffer @ 8kHz). Requesting >750ms will be clamped or wrap.
+-   **Feedback Safety**: Controls how much sound is fed back.
+    -   **0-200**: Safe range.
+    -   **255 (Max)**: **DANGER**. Infinite loop. Volume never decreases, noise builds up into a screech.
+-   **Polyphony**: You have 4 hardware voices. Long release times + long echoes + fast playing will cause "voice stealing" (notes cutting out).
+
 -   **Status Monitoring**: LED indicator for system health
     -   Solid ON = All systems OK
     -   Fast blink (5 Hz) = I2C communication error

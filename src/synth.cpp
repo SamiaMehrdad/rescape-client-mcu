@@ -11,20 +11,11 @@
 #include <algorithm>
 
 //============================================================================
-// CONFIGURATION
+// CONFIGURATION ADSR PRESETS
 //============================================================================
 
-// Sound preset lookup table [preset][waveform, attack, decay, sustain, release]
-static const u16 SOUND_PRESETS[][5] = {
-    {WAVE_TRIANGLE, 5, 80, 50, 120},    // SOUND_PLUCK: Triangle, quick percussive
-    {WAVE_SINE, 150, 200, 180, 300},    // SOUND_FLUTE: Sine, gentle pad
-    {WAVE_SQUARE, 0, 0, 255, 50},       // SOUND_ORGAN: Square, instant sustain
-    {WAVE_TRIANGLE, 10, 150, 120, 200}, // SOUND_PIANO: Triangle, natural decay
-    {WAVE_NOISE, 1, 30, 0, 50},         // SOUND_PERCUSSION: Noise, very short
-    {WAVE_SQUARE, 0, 5, 200, 10},       // SOUND_BEEP: Square, instant beep
-    {WAVE_SAWTOOTH, 20, 100, 150, 150}, // SOUND_SYNTH_LEAD: Sawtooth, balanced
-    {WAVE_TRIANGLE, 5, 120, 100, 180}   // SOUND_DEFAULT: Triangle, general purpose
-};
+// Sound preset definitions are now in synth.h (include/synth.h SOUND_PRESETS)
+// to avoid duplication between enum and data table.
 
 //============================================================================
 // ISR AND GLOBAL INSTANCE
@@ -52,8 +43,8 @@ void IRAM_ATTR sampleTimerISR()
  ***************************************************************/
 Synth::Synth(u8 outputPin, u8 pwmChannel)
     : pin(outputPin), channel(pwmChannel), sampleRate(8000), waveform(WAVE_SINE),
-      presetEchoEnabled(false), delayBuffer(nullptr), delayBufferLen(0), delayWriteIndex(0),
-      musicPlayer(nullptr)
+      presetEchoEnabled(false), presetEchoSendLevel(0), delayBuffer(nullptr), delayBufferLen(0), delayWriteIndex(0),
+      musicPlayer(nullptr), lfsrState(0x12345678), lpfState(128)
 {
         // Default ADSR envelope
         envelope.attackMs = 10;
@@ -120,20 +111,9 @@ void Synth::setSoundPreset(SoundPreset preset)
         setWaveform(static_cast<Waveform>(params[0]));
         setADSR(params[1], params[2], params[3], params[4]);
 
-        // Configure Echo Property for this sound
-        switch (preset)
-        {
-        case SOUND_PLUCK:
-        case SOUND_FLUTE:
-        case SOUND_SYNTH_LEAD:
-                presetEchoEnabled = true;
-                break;
-        case SOUND_PERCUSSION:
-        case SOUND_BEEP:
-        default:
-                presetEchoEnabled = false;
-                break;
-        }
+        // Per-instrument echo settings from preset
+        presetEchoEnabled = (bool)params[5]; // params[5] = echo enabled flag
+        presetEchoSendLevel = (u8)params[6]; // params[6] = echo send level (0-255)
 }
 
 /************************* begin *******************************************
@@ -220,6 +200,17 @@ static const u8 SINE_TABLE[256] = {
     37, 40, 42, 44, 47, 49, 52, 54, 57, 59, 62, 65, 67, 70, 73, 76,
     79, 82, 85, 88, 90, 93, 97, 100, 103, 106, 109, 112, 115, 118, 121, 124};
 
+/************************* generateLFSRNoise ****************************
+ * Fast LFSR-based noise generator (Galois configuration).
+ * Fast, deterministic, and low CPU cost for ISR.
+ ***************************************************************/
+u8 Synth::generateLFSRNoise()
+{
+        // Galois LFSR: shift right, XOR with tap polynomial if LSB=1
+        lfsrState = (lfsrState >> 1) ^ (-(int32_t)(lfsrState & 1u) & 0xB4000000u);
+        return lfsrState & 0xFF;
+}
+
 /************************* generateSample *********************************
  * Generate one waveform sample for a phase [0, 255].
  * Optimized for integer math.
@@ -256,7 +247,7 @@ u8 Synth::generateSample(u8 phase, Waveform wave)
                 break;
 
         case WAVE_NOISE:
-                sample = random(0, 256);
+                sample = generateLFSRNoise();
                 break;
         }
 
@@ -528,9 +519,19 @@ void IRAM_ATTR Synth::updateSample()
 
         // --- 5. Final Mix & Output ---
         static bool pwmActive = false;
-        // Keep active if voices are playing OR echo is enabled (to hear tails)
-        if (activeVoices > 0 || (echo.globalEnabled && delayBuffer != nullptr))
+        static u32 silenceCounter = 0;
+        static const u32 SILENCE_THRESHOLD_MS = 100;                                 // 100ms of silence before detaching PWM
+        static const u32 SILENCE_SAMPLE_THRESHOLD = 3;                               // Signal threshold (0-127 range)
+        u32 silenceSampleThreshold = (SILENCE_SAMPLE_THRESHOLD * sampleRate) / 1000; // Convert to samples
+
+        // Check for active sound (voices or significant signal in echo)
+        bool isSignificant = (activeVoices > 0) || (abs(mixedSample) > SILENCE_SAMPLE_THRESHOLD);
+
+        if (isSignificant)
         {
+                // Reset silence counter when sound is detected
+                silenceCounter = 0;
+
                 // If PWM was stopped, reattach
                 bool justAttached = false;
                 if (!pwmActive)
@@ -540,42 +541,53 @@ void IRAM_ATTR Synth::updateSample()
                         pwmActive = true;
                         justAttached = true;
                 }
-                // Simple limiter/clipper
-                // Divide by 2 to prevent clipping when multiple voices sum up
-                // With echo, we might need more headroom, but let's stick to /2 for now
-                mixedSample = mixedSample / 2;
+                // Dynamic limiter: divide by number of active voices (minimum 2 for headroom)
+                // Prevents clipping on multi-voice chords while preserving quiet passages
+                int divisor = (activeVoices > 0) ? activeVoices : 1;
+                if (divisor < 2)
+                        divisor = 2; // Minimum 3 dB headroom
+                mixedSample = mixedSample / divisor;
+
                 if (mixedSample > 127)
                         mixedSample = 127;
                 if (mixedSample < -128)
                         mixedSample = -128;
                 u8 pwmVal = (u8)(mixedSample + 128);
 
-                // Lightweight IIR smoothing to reduce stepping/quantization noise
-                // smoothed = (7/8)*smoothed + (1/8)*pwmVal
-                static int smoothed = 128;
+                // Second-order IIR low-pass filter to reduce aliasing and quantization noise
+                // y = (15/16)*y + (1/16)*x  (Fc ~2 kHz at 40 kHz sample rate)
                 if (justAttached)
                 {
-                        // Initialize smoothing state to current value to avoid clicks
-                        smoothed = pwmVal;
+                        // Initialize filter state to current value to avoid clicks
+                        lpfState = pwmVal;
                 }
                 else
                 {
-                        smoothed = ((smoothed * 7) + pwmVal) >> 3;
+                        lpfState = ((lpfState * 15) + pwmVal) >> 4;
                 }
 
-                ledcWrite(channel, (u8)smoothed);
-                ledcWrite(channel2, 255 - (u8)smoothed); // Complementary output
+                ledcWrite(channel, (u8)lpfState);
+                ledcWrite(channel2, 255 - (u8)lpfState); // Complementary output
         }
         else
         {
-                // Silence: detach PWM and set both pins LOW
-                if (pwmActive)
+                // Accumulate silence samples
+                silenceCounter++;
+                u32 silenceSamples = (SILENCE_THRESHOLD_MS * sampleRate) / 1000;
+
+                // Detach PWM only after sustained silence
+                if (silenceCounter >= silenceSamples && pwmActive)
                 {
                         ledcDetachPin(pin);
                         ledcDetachPin(pin2);
                         pwmActive = false;
                 }
-                digitalWrite(pin, LOW);
-                digitalWrite(pin2, LOW);
+
+                // Always set pins LOW when silent
+                if (!pwmActive)
+                {
+                        digitalWrite(pin, LOW);
+                        digitalWrite(pin2, LOW);
+                }
         }
 }

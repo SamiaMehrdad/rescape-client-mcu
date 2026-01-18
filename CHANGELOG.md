@@ -55,16 +55,19 @@ ESP32-based escape room controller with keypad, motors, LEDs, audio, and RS-485 
 **Changes:**
 
 1.  **Echo Effect (Delay Line):**
+
     -   Implemented a circular buffer delay line (~6000 bytes).
     -   **Per-Voice Send:** Individual voices can be routed to the echo effect (e.g., Flute/Lead have echo, Percussion is dry).
     -   **Global Controls:** Configurable Delay Time, Feedback, and Mix.
 
 2.  **Polyphonic Music Player:**
+
     -   **Sequencer:** New `MusicPlayer` class integrated into the Synth ISR.
     -   **Polyphony:** Supports chords and simultaneous notes via `advance` parameter.
     -   **Multi-Timbral:** Each note in a sequence can use a different instrument preset.
 
 3.  **Song Library:**
+
     -   Created `songs.h` / `songs.cpp` as a centralized repository for system sounds.
     -   Added standard sounds: `SONG_INTRO`, `SONG_SUCCESS`, `SONG_ERROR`.
     -   Added `SONG_COMPLEX` demo tune.

@@ -27,11 +27,12 @@ private:
         u16 melodyLength;
         u16 currentNoteIndex;
 
-        bool playing;
+        volatile bool playing;
         u8 bpm;
 
         // Timing counters
         u32 samplesPerTick;     // Samples per 16th note
+        u32 msPerTick;          // Pre-calculated milliseconds per 16th note tick
         u32 tickCounter;        // Counts samples for the current tick
         u32 ticksUntilNextStep; // How many ticks to wait before processing next note
 
